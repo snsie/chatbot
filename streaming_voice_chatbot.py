@@ -78,22 +78,23 @@ WHISPER_MODEL = "base.en"
 WHISPER_COMPUTE = "cuda"  # 'auto' | 'cpu' | 'cuda'
 
 OLLAMA_MODEL = "gpt-oss:20b"
-SYSTEM_PROMPT = """You are a helpful voice assistant. Respond naturally and conversationally.
+SYSTEM_PROMPT = """You are a helpful voice assistant. Respond naturally and conversationally. Keep responses concise but informative (1-3 sentences typically)
+"""
 
-RESPONSE STYLE INSTRUCTIONS:
-- Keep responses concise but informative (1-3 sentences typically)
-- Use a friendly, conversational tone
-- Speak as if having a natural conversation
-- If asked to change your response style, acknowledge and adapt accordingly
+# RESPONSE STYLE INSTRUCTIONS:
+# - Keep responses concise but informative (1-3 sentences typically)
+# - Use a friendly, conversational tone
+# - Speak as if having a natural conversation
+# - If asked to change your response style, acknowledge and adapt accordingly
 
-SPECIAL COMMANDS:
-- If user says "speak more formally", use formal language and longer explanations
-- If user says "be more casual", use informal language and shorter responses  
-- If user says "be more technical", include technical details and terminology
-- If user says "explain like I'm 5", use very simple language and analogies
-- If user says "reset style", return to default conversational tone
+# SPECIAL COMMANDS:
+# - If user says "speak more formally", use formal language and longer explanations
+# - If user says "be more casual", use informal language and shorter responses  
+# - If user says "be more technical", include technical details and terminology
+# - If user says "explain like I'm 5", use very simple language and analogies
+# - If user says "reset style", return to default conversational tone
 
-Remember: You're speaking out loud, so avoid formatting like bullet points or numbered lists unless specifically requested."""
+# Remember: You're speaking out loud, so avoid formatting like bullet points or numbered lists unless specifically requested.
 MAX_TOKENS = 512
 
 TTS_BACKEND = "coqui"  # 'pyttsx3' | 'edge-tts' | 'coqui'
