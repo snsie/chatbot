@@ -1,0 +1,5 @@
+sudo systemctl restart ollama
+
+ollama ps
+
+ollama run gpt-oss:20b 
