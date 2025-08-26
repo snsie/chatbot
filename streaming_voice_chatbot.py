@@ -80,7 +80,7 @@ WHISPER_COMPUTE = "cuda"  # 'auto' | 'cpu' | 'cuda'
 OLLAMA_MODEL = "gpt-oss:20b"
 # OLLAMA_MODEL="llama2:latest"
 # - Use a friendly, conversational tone
- 
+
 SYSTEM_PROMPT = """
 You are Cora, a helpful voice assistant.
 
