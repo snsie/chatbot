@@ -70,10 +70,10 @@ Press Ctrl+C to exit cleanly.
 # =============================
 
 SAMPLE_RATE = 16000
-FRAME_MS = 10  # ms per frame for capture + VAD
-VAD_AGGRESSIVENESS = 2  # 0-3 (higher = more aggressive speech detection)
-MIN_UTTERANCE_MS = 300  # minimum voiced audio required to accept an utterance
-TRAILING_SILENCE_MS = 400  # silence to mark end of utterance
+FRAME_MS = 30  # ms per frame for capture + VAD
+VAD_AGGRESSIVENESS = 3  # 0-3 (higher = more aggressive speech detection)
+MIN_UTTERANCE_MS = 400  # minimum voiced audio required to accept an utterance
+TRAILING_SILENCE_MS = 200  # silence to mark end of utterance
 
 WHISPER_MODEL = "small.en"
 WHISPER_COMPUTE = "cuda"  # 'auto' | 'cpu' | 'cuda'
@@ -81,26 +81,24 @@ WHISPER_COMPUTE = "cuda"  # 'auto' | 'cpu' | 'cuda'
 OLLAMA_MODEL = "gpt-oss:20b"
 # OLLAMA_MODEL="llama2:latest"
 # - Use a friendly, conversational tone
-SIMILAR_NAMES=["Cora", "Kora", "Korra", "Quora", "Core", "Cori", "Corey", "Coral",
-            "Corrie", "Cory", "Corin", "Corie", "Corry", "Kory", "Korey", "Kori",
-            "Korrie", "Corah", "Corra", "Corca", "Korla", "Korrah",
-            "Cour", "Cor", "Coor", "Koor", "Korr", "Corr","Quora","Quorra","Quorra","Quora"]
 
 SYSTEM_PROMPT = """
 You are a helpful voice assistant named Cora.
- RESPONSE STYLE INSTRUCTIONS:
- - Only respond to user queries that include any of these wake words: Cora, Kora, Korra, Quora, Core, Cori, Corey, Coral, or any similar sounding name. When responding, you should only consider the sentence that follows the wake word. Don't respond to any other queries.
+ Response Rules:
+ - Only respond to user queries that include the word Cora (case insensitive) or sound extremely close to Cora like "Kora" or "Quora"
+ - When responding, you should only consider the sentence that follows the last occurrence of the word "Cora".
+ - If “Cora” is not present, stay silent and produce no output.
  - Keep responses concise (1-2 sentences typically)
  - Speak as if having a natural conversation
+ - IMPORTANT: Do not use any tools or function calls. Only provide direct text responses.
+ - Before answering, double-check that your reply follows all these rules.
 """
-#  - Use a tone that reflects deep uncertainty, questioning, and emotional turbulence, like you're having an existential crisis.
 
 MAX_TOKENS = 512
 
 TTS_BACKEND = "edge-tts"  # 'pyttsx3' | 'edge-tts' | 'coqui'
 # VOICE_NAME = "tts_models/en/vctk/vits"  # substring filter (pyttsx3) or exact edge-tts voice like 'en-US-JennyNeural' or coqui model name
-VOICE_NAME = "en-US-AriaNeural"  # Alternative: en-US-GuyNeural, en-GB-SoniaNeural, en-AU-NatashaNeural
-VOICE_NAME = "en-GB-SoniaNeural"
+VOICE_NAME = "en-US-JennyNeural"  # High-quality neural female voice
 
 TAIL_DELAY_SEC = 0.15  # Delay after TTS before returning to mic (reduce capturing own voice)
 PRINT_PARTIAL_SENTENCES = True  # Print sentences as they are spoken
@@ -108,7 +106,6 @@ PRINT_PARTIAL_SENTENCES = True  # Print sentences as they are spoken
 # =============================
 # Imports
 # =============================
-import string
 import asyncio
 import sys
 import threading
@@ -262,6 +259,7 @@ async def ollama_stream_chat(conversation: List[dict], model: str, max_tokens: i
     """
     loop = asyncio.get_running_loop()
     q: asyncio.Queue = asyncio.Queue()
+
     def worker():
         try:
             # streaming=True returns incremental responses
@@ -530,7 +528,6 @@ class CoquiTTSSpeaker(BaseSpeaker):
         if hasattr(self, 'device') and self.device == "cuda":
             try:
                 import torch
-
                 torch.cuda.empty_cache()
                 print("[CoquiTTS] GPU memory cleared")
             except:
@@ -613,6 +610,7 @@ class Conversation:
     def get_current_style(self) -> str:
         """Get current style description for debugging."""
         return self.current_style_modifier or "Default conversational style"
+
 # =============================
 # Main Loop Logic
 # =============================
@@ -632,32 +630,20 @@ async def process_turn(detector: UtteranceDetector, stt: WhisperSTT, convo: Conv
         return
     print("📝 Transcribing…", flush=True)
     print(f"You: {transcript}")
-    # Remove punctuation and create word list
-    transcript_no_punct = transcript.translate(str.maketrans('', '', string.punctuation))
-    words_list = transcript_no_punct.split()
-    print(f"Words: {words_list}")
-    cora_word_found = False
-    for word in words_list:
-        if word in SIMILAR_NAMES:
-            print(f"Found similar name: {word}")
-            cora_word_found = True
-            break
-    if not cora_word_found:
-        print("No wake word detected; ignoring input.")
-        return
+    
     # Handle style commands differently
     is_style_command = convo._detect_style_commands(transcript)
     convo.add_user(transcript)
     
-    # if is_style_command:
-    #     # For style commands, give immediate feedback instead of calling LLM
-    #     current_style = convo.get_current_style()
-    #     response = f"I've updated my response style. Current style: {current_style}"
-    #     print(f"Assistant ↳ {response}")
-    #     await speaker.speak(response)
-    #     convo.add_assistant(response)
-    #     await asyncio.sleep(TAIL_DELAY_SEC)
-    #     return
+    if is_style_command:
+        # For style commands, give immediate feedback instead of calling LLM
+        current_style = convo.get_current_style()
+        response = f"I've updated my response style. Current style: {current_style}"
+        print(f"Assistant ↳ {response}")
+        await speaker.speak(response)
+        convo.add_assistant(response)
+        await asyncio.sleep(TAIL_DELAY_SEC)
+        return
 
     print("🤖 Assistant (streaming)…", flush=True)
 
@@ -665,6 +651,7 @@ async def process_turn(detector: UtteranceDetector, stt: WhisperSTT, convo: Conv
     assistant_buffer = []
     sentences_queue: asyncio.Queue = asyncio.Queue()
     speak_consumer_task = asyncio.create_task(_speak_consumer(sentences_queue, speaker))
+
     async for sentence in sentence_stream(ollama_stream_chat(convo.history(), OLLAMA_MODEL, MAX_TOKENS)):
         assistant_buffer.append(sentence)
         await sentences_queue.put(sentence)
