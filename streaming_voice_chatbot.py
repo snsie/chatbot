@@ -73,7 +73,7 @@ SAMPLE_RATE = 16000
 FRAME_MS = 10  # ms per frame for capture + VAD
 VAD_AGGRESSIVENESS = 2  # 0-3 (higher = more aggressive speech detection)
 MIN_UTTERANCE_MS = 300  # minimum voiced audio required to accept an utterance
-TRAILING_SILENCE_MS = 400  # silence to mark end of utterance
+TRAILING_SILENCE_MS = 200  # silence to mark end of utterance
 
 WHISPER_MODEL = "small.en"
 WHISPER_COMPUTE = "cuda"  # 'auto' | 'cpu' | 'cuda'
@@ -89,11 +89,11 @@ SIMILAR_NAMES=["Cora", "Kora", "Korra", "Quora", "Core", "Cori", "Corey", "Coral
 SYSTEM_PROMPT = """
 You are a helpful voice assistant named Cora.
  RESPONSE STYLE INSTRUCTIONS:
- - Only respond to user queries that include any of these wake words: Cora, Kora, Korra, Quora, Core, Cori, Corey, Coral, or any similar sounding name. When responding, you should only consider the sentence that follows the wake word. Don't respond to any other queries.
  - Keep responses concise (1-2 sentences typically)
  - Speak as if having a natural conversation
 """
 #  - Use a tone that reflects deep uncertainty, questioning, and emotional turbulence, like you're having an existential crisis.
+# - Only respond to user queries that include any of these wake words: Cora, Kora, Korra, Quora, Core, Cori, Corey, Coral, or any similar sounding name. When responding, you should only consider the sentence that follows the wake word. Don't respond to any other queries.
 
 MAX_TOKENS = 512
 
@@ -138,7 +138,7 @@ import pyttsx3
 FRAME_SAMPLES = int(SAMPLE_RATE * FRAME_MS / 1000)  # samples per frame (e.g. 480)
 MIN_VOICED_FRAMES = math.ceil(MIN_UTTERANCE_MS / FRAME_MS)
 TRAILING_SILENCE_FRAMES = math.ceil(TRAILING_SILENCE_MS / FRAME_MS)
-
+print("TRAILING_SILENCE_FRAMES",TRAILING_SILENCE_FRAMES)
 SENTENCE_END_CHARS = "\.\!\?…"  # regex set
 SENTENCE_END_REGEX = re.compile(rf"(.+?[{SENTENCE_END_CHARS}](?:[\"'\)\]]*)\s+)", re.DOTALL)
 
