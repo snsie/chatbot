@@ -1,3 +1,6 @@
+#added a new import, added 4 variables, and modified the process_turn function
+
+
 #!/usr/bin/env python3
 """
 Streaming Voice Chatbot
@@ -83,14 +86,15 @@ OLLAMA_MODEL = "gpt-oss:20b"
 
 SYSTEM_PROMPT = """
 You are a helpful voice assistant named Cora.
- Response Rules:
- - Only respond to user queries that include the word Cora (case insensitive) or sound extremely close to Cora like "Kora" or "Quora"
- - When responding, you should only consider the sentence that follows the last occurrence of the word "Cora".
- - If “Cora” is not present, stay silent and produce no output.
- - Keep responses concise (1-2 sentences typically)
- - Speak as if having a natural conversation
- - IMPORTANT: Do not use any tools or function calls. Only provide direct text responses.
- - Before answering, double-check that your reply follows all these rules.
+Response Rules:
+- Only respond to user queries that include the word "Cora" or phonetically similar words like "Kora", "Quora", "Core", "Coral", "Corona", etc.
+- Speech-to-text may mishear "Cora" as similar sounding words - be flexible with variations and expect it to be the first word in the query
+- When responding, consider the sentence that follows the wake word
+- Keep responses concise (1-2 sentences typically)
+- Speak as if having a natural conversation
+- IMPORTANT: Do not use any tools or function calls. Only provide direct text responses.
+- If you're unsure whether the user said "Cora", err on the side of responding rather than staying silent
+- Before answering, double-check that your reply follows all these rules.
 """
 
 MAX_TOKENS = 512
@@ -99,7 +103,7 @@ TTS_BACKEND = "edge-tts"  # 'pyttsx3' | 'edge-tts' | 'coqui'
 # VOICE_NAME = "tts_models/en/vctk/vits"  # substring filter (pyttsx3) or exact edge-tts voice like 'en-US-JennyNeural' or coqui model name
 VOICE_NAME = "en-US-JennyNeural"  # High-quality neural female voice
 
-TAIL_DELAY_SEC = 0.15  # Delay after TTS before returning to mic (reduce capturing own voice)
+TAIL_DELAY_SEC = 0.5  # Delay after TTS before returning to mic (reduce capturing own voice)
 PRINT_PARTIAL_SENTENCES = True  # Print sentences as they are spoken
 
 # =============================
@@ -128,6 +132,15 @@ import ollama  # Official Ollama Python client
 # TTS (pyttsx3 always imported; optional edge-tts, pydub, simpleaudio imported lazily)
 import pyttsx3
 
+# Voice ID 
+from voice_id import get_voice_identifier
+ENABLE_SPEAKER_GATE = True
+ENROLL_PATH = "enrollments.npz"
+SIM_THRESHOLD = 0.6
+
+voice_identifier = get_voice_identifier(ENROLL_PATH) if ENABLE_SPEAKER_GATE else None
+
+
 # =============================
 # Utility
 # =============================
@@ -153,11 +166,28 @@ class UtteranceDetector:
 
     def __init__(self, aggressiveness: int = VAD_AGGRESSIVENESS):
         self.vad = webrtcvad.Vad(aggressiveness)
+        self._stream = None
+        self._is_muted = False
+
+    def mute_microphone(self):
+        """Temporarily mute the microphone."""
+        self._is_muted = True
+        if self._stream:
+            try:
+                self._stream.close()
+                self._stream = None
+            except:
+                pass
+
+    def unmute_microphone(self):
+        """Unmute the microphone."""
+        self._is_muted = False
 
     def record_once(self) -> Optional[np.ndarray]:
-        """Blocking capture of a single utterance. Returns float32 waveform or None.
-        May block indefinitely until speech occurs or user interrupts.
-        """
+        """Blocking capture of a single utterance. Returns float32 waveform or None."""
+        if self._is_muted:
+            return None
+            
         q: 'queue.Queue[bytes]' = queue.Queue()
         started = False
         voiced_count = 0
@@ -165,26 +195,33 @@ class UtteranceDetector:
         collected: List[bytes] = []
         overflow_counter = 0
 
-        def callback(indata, frames, time_info, status):  # sounddevice RawInputStream callback
+        def callback(indata, frames, time_info, status):
             nonlocal overflow_counter
             if status.input_overflow:
-                overflow_counter += 1  # We tolerate overflow; frames still usable.
-            q.put(bytes(indata))
+                overflow_counter += 1
+            if not self._is_muted:  # Only collect if not muted
+                q.put(bytes(indata))
 
-        with sd.RawInputStream(
+        self._stream = sd.RawInputStream(
             samplerate=SAMPLE_RATE,
             blocksize=FRAME_SAMPLES,
             channels=1,
             dtype='int16',
             callback=callback,
-        ):
+        )
+
+        with self._stream:
             while True:
+                if self._is_muted:
+                    return None
+                    
                 try:
-                    frame = q.get()
+                    frame = q.get(timeout=0.1)
+                except queue.Empty:
+                    continue
                 except KeyboardInterrupt:
                     raise
-                if frame is None:
-                    continue
+                    
                 is_speech = False
                 try:
                     is_speech = self.vad.is_speech(frame, SAMPLE_RATE)
@@ -616,19 +653,37 @@ class Conversation:
 # =============================
 async def process_turn(detector: UtteranceDetector, stt: WhisperSTT, convo: Conversation, speaker: BaseSpeaker):
     print("🎤 Listening…", flush=True)
-    audio = await asyncio.to_thread(detector.record_once)
-    print("processing", flush=True)
+
+    audio = await asyncio.to_thread(detector.record_once)  # Add back the asyncio.to_thread()
     if audio is None or not len(audio):
         print("🛑 No audio captured.")
         return  # Nothing captured; loop again
+    
+
+    if ENABLE_SPEAKER_GATE and voice_identifier is not None:
+        try:
+            best_name, best_sim = voice_identifier.identify_from_array(audio, 16000)
+            if best_name is None:
+                await speaker.speak("I don't have any enrolled voices yet.")
+                return
+            if best_sim < SIM_THRESHOLD:
+                print(f"[Gate] ❌ Deny: best={best_name}, sim={best_sim:.3f}")
+                await speaker.speak("Sorry, I didn’t recognize your voice. Please try again.")
+                return
+            print(f"[Gate] ✅ Allow: {best_name} (sim={best_sim:.3f})")
+        except Exception as e:
+            print(f"[Gate Error] {e}")
+            await speaker.speak("Voice check failed. Please try again.")
+            return
+        
     try:
+        print("📝 Transcribing…", flush=True)
         transcript = await asyncio.to_thread(stt.transcribe, audio)
     except Exception as e:
         print(f"[STT Error] {e}")
         return
     if not transcript.strip():
         return
-    print("📝 Transcribing…", flush=True)
     print(f"You: {transcript}")
     
     # Handle style commands differently
@@ -650,7 +705,7 @@ async def process_turn(detector: UtteranceDetector, stt: WhisperSTT, convo: Conv
     # Streaming generation
     assistant_buffer = []
     sentences_queue: asyncio.Queue = asyncio.Queue()
-    speak_consumer_task = asyncio.create_task(_speak_consumer(sentences_queue, speaker))
+    speak_consumer_task = asyncio.create_task(_speak_consumer(sentences_queue, speaker, detector))  # Pass detector
 
     async for sentence in sentence_stream(ollama_stream_chat(convo.history(), OLLAMA_MODEL, MAX_TOKENS)):
         assistant_buffer.append(sentence)
@@ -664,17 +719,31 @@ async def process_turn(detector: UtteranceDetector, stt: WhisperSTT, convo: Conv
 
     full_assistant_text = ' '.join(assistant_buffer)
     convo.add_assistant(full_assistant_text)
-    await asyncio.sleep(TAIL_DELAY_SEC)
+    # Note: TAIL_DELAY_SEC is now handled in _speak_consumer
 
-async def _speak_consumer(q: 'asyncio.Queue[Optional[str]]', speaker: BaseSpeaker):
+async def _speak_consumer(q: 'asyncio.Queue[Optional[str]]', speaker: BaseSpeaker, detector: UtteranceDetector):
+    sentences_spoken = 0
+    
+    # Mute microphone when starting to speak
+    detector.mute_microphone()
+    
     while True:
         sentence = await q.get()
         if sentence is None:
             break
         try:
             await speaker.speak(sentence)
+            sentences_spoken += 1
         except Exception as e:
             print(f"[TTS Error] {e}")
+    
+    # Dynamic delay based on how much was spoken
+    dynamic_delay = 0.5
+    await asyncio.sleep(dynamic_delay)
+    
+    # Unmute microphone after speaking is completely done
+    detector.unmute_microphone()
+    print("🔊 Microphone reactivated")
 
 # =============================
 # Entry Point
@@ -695,7 +764,6 @@ async def main():
     try:
         while True:
             await process_turn(detector, stt, convo, speaker)
-            print("waiting", flush=True)
     except KeyboardInterrupt:
         print("\nExiting…")
     finally:
