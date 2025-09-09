@@ -51,7 +51,7 @@ class Config(BaseModel):
     )
     
     trailing_silence_ms: int = Field(
-        default=200,
+        default=1200,
         description="Silence duration to mark end of utterance (ms)",
         ge=50,
         le=2000
@@ -78,9 +78,9 @@ class Config(BaseModel):
     similar_names: List[str] = Field(
         default=[
             "Cora", "Kora", "Korra", "Quora", "Core", "Cori", "Corey", "Coral",
-            "Corrie", "Cory", "Corin", "Corie", "Corry", "Kory", "Korey", "Kori",
+            "Corrie", "Cory", "Coro", "Corro", "Corin", "Corie", "Corry", "Kory", "Korey", "Kori",
             "Korrie", "Corah", "Corra", "Corca", "Korla", "Korrah",
-            "Cour", "Cor", "Coor", "Koor", "Korr", "Corr", "Quora", "Quorra"
+            "Cour", "Cor", "Coor", "Koor", "Korr", "Corr", "Quora", "Quorra", "Core"
         ],
         description="List of wake words that trigger the assistant"
     )

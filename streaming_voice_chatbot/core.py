@@ -9,7 +9,7 @@ import string
 from typing import Optional
 
 from .config import default_config, Config
-from .detection import UtteranceDetector, WhisperSTT
+from .detection import StreamingUtteranceDetector, WhisperSTT
 from .llm import Conversation, ollama_stream_chat, sentence_stream
 from .tts import create_speaker, BaseSpeaker
 
@@ -41,7 +41,7 @@ class StreamingVoiceChatbot:
             except Exception:
                 pass
         
-        self.detector = UtteranceDetector(self.config)
+        self.detector = StreamingUtteranceDetector(self.config)
         self.stt = WhisperSTT(self.config)
         self.speaker = await create_speaker(self.config)
         self.conversation = Conversation(self.config)
@@ -49,19 +49,20 @@ class StreamingVoiceChatbot:
     async def process_turn(self):
         """Process a single conversation turn."""
         print("🎤 Listening…", flush=True)
-        audio = await asyncio.to_thread(self.detector.record_once, self.stt)
-        print("🛑 Stopped listening.", flush=True)
         
-        if audio is None or not len(audio):
+        # Start recording in background if not already started
+        if not hasattr(self, '_recording_started'):
+            await self.detector.start_recording()
+            self._recording_started = True
+        
+        # Get utterance without blocking the main thread
+        transcript = await self.detector.get_utterance(self.stt)
+        print("🛑 Stopped listening.", flush=True)
+
+        if transcript is None or not len(transcript):
             print("🛑 No audio captured.")
             return  # Nothing captured; loop again
-            
-        try:
-            transcript = await asyncio.to_thread(self.stt.transcribe, audio)
-        except Exception as e:
-            print(f"[STT Error] {e}")
-            return
-            
+        
         if not transcript.strip():
             return
             
@@ -144,6 +145,8 @@ class StreamingVoiceChatbot:
             
     async def cleanup(self):
         """Clean up resources."""
+        if self.detector:
+            await self.detector.cleanup()
         if self.speaker:
             await self.speaker.close()
 

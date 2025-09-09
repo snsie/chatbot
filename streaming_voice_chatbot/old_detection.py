@@ -156,16 +156,15 @@ class StreamingUtteranceDetector:
             self.stream.stop()
             self.stream.close()
             self.stream = None
-                  
-    async def get_utterance(self, stt, timeout: float = 30.0, transcript_check_interval: int = 100) -> Optional[str]:
+            
+    async def get_utterance(self,stt, timeout: float = 30.0) -> Optional[np.ndarray]:
         """Get next complete utterance (non-blocking with timeout).
         
         Args:
             timeout: Maximum time to wait for an utterance in seconds
-            transcript_check_interval: How often (in frames) to check interim transcription if stt is provided
             
         Returns:
-            Transcribed text or None if timeout/no utterance
+            Audio data as float32 numpy array or None if timeout/no utterance
         """
         if self.stream is None:
             await self.start_recording()
@@ -176,9 +175,6 @@ class StreamingUtteranceDetector:
         collected: List[bytes] = []
         start_time = asyncio.get_event_loop().time()
         transcript_counter = 0
-        prev_transcript_length = 0
-        transcript = ""
-        
         while True:
             transcript_counter += 1
             try:
@@ -186,13 +182,14 @@ class StreamingUtteranceDetector:
                 if asyncio.get_event_loop().time() - start_time > timeout:
                     return None
                     
-                # Wait for audio chunk with short timeout
+                # Wait for audio chunk with short timeout to allow responsiveness
                 try:
                     frame = await asyncio.wait_for(
                         self.audio_queue.get(), 
                         timeout=0.1
                     )
                 except asyncio.TimeoutError:
+                    # No audio data, check if we have enough for an utterance
                     if started and collected and silence_count >= self.config.TRAILING_SILENCE_FRAMES:
                         break
                     continue
@@ -202,69 +199,57 @@ class StreamingUtteranceDetector:
                 try:
                     is_speech = self.vad.is_speech(frame, self.config.SAMPLE_RATE)
                 except Exception:
+                    # If VAD fails, treat as silence
                     is_speech = False
                     
+                # print('1' if is_speech else '0', end='', flush=True)  # Debug output
+                
                 if not started:
                     if is_speech:
                         voiced_count += 1
                         collected.append(frame)
                         if voiced_count >= self.config.MIN_VOICED_FRAMES:
-                            prev_transcript_length = 0
                             started = True
                             silence_count = 0
-                            transcript_counter = 0  # Reset counter when starting
                     else:
+                        # Reset on silence before utterance starts
                         voiced_count = 0
                         collected.clear()
                 else:
-                    collected.append(frame)
-                    
-                    # Only transcribe periodically and when we have enough audio
-                    if (transcript_counter % transcript_check_interval == 0 and 
-                        stt is not None and len(collected) >= self.config.MIN_VOICED_FRAMES):
-                        
-                        # Yield control to event loop without blocking sleep
-                        await asyncio.sleep(0.1)
-                        
+                    if transcript_counter % 25 == 0 and stt is not None:
+                        time.sleep(0.1)  # Yield to event loop
+
                         pcm = b''.join(collected)
                         audio = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
-                        
-                        try:
-                            # Use asyncio.to_thread for better async handling
-                            transcript = await asyncio.to_thread(stt.transcribe, audio)
-                            
-                            if len(transcript) > prev_transcript_length:
-                                print(f'New transcript: {transcript}', flush=True)
-                                silence_count = 0  # Reset silence counter on new content
-                                prev_transcript_length = len(transcript)
-                            elif transcript.strip():  # Only count if we have actual content
-                                # Check if transcript stopped growing
-                                silence_frames_equivalent = transcript_counter - (prev_transcript_length or transcript_counter)
-                                if silence_frames_equivalent >= self.config.TRAILING_SILENCE_FRAMES:
-                                    print("Transcript stopped growing, ending utterance.", flush=True)
-                                    print('', flush=True)
-                                    break
-                                    
-                        except Exception as e:
-                            print(f"[STT Error] {e}")
-                            
-                    # if is_speech:
-                    #     silence_count = 0
-                    # else:
-                    #     silence_count += 1
-                    #     if silence_count >= self.config.TRAILING_SILENCE_FRAMES:
-                    #         break
+                        transcript = await asyncio.to_thread(stt.transcribe, audio)
+                        print(f"\nInterim transcript: {transcript}\n", flush=True)
+                    # After started, collect all frames
+                    collected.append(frame)
+                    if is_speech:
+                        silence_count = 0
+                    else:
+                        silence_count += 1
+                        if silence_count >= self.config.TRAILING_SILENCE_FRAMES:
+                            break  # End of utterance
                             
             except Exception as e:
                 print(f"Error processing audio frame: {e}")
                 continue
         
-        if not transcript or not transcript.strip():
-            print('No valid transcript found', flush=True)
+        if not collected:
             return None
             
-        print('Returning transcript:', transcript, flush=True)
-        return transcript.strip()
+        # Remove trailing silence frames for cleaner STT input
+        if silence_count > 0:
+            collected = collected[:-silence_count] or collected
+            
+        if len(collected) < self.config.MIN_VOICED_FRAMES:
+            return None  # Too short, discard
+            
+        # Convert to audio
+        pcm = b''.join(collected)
+        audio = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
+        return audio
         
     def _is_silence(self, audio_chunk: np.ndarray, threshold: float = 0.01) -> bool:
         """Check if audio chunk is mostly silence."""
