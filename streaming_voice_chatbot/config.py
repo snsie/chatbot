@@ -44,7 +44,7 @@ class Config(BaseModel):
     )
     
     min_utterance_ms: int = Field(
-        default=300,
+        default=200,
         description="Minimum voiced audio required to accept an utterance (ms)",
         ge=100,
         le=5000
@@ -59,7 +59,7 @@ class Config(BaseModel):
 
     # Speech-to-Text Configuration
     whisper_model: str = Field(
-        default="small.en",
+        default="medium.en",
         description="Whisper model to use for speech-to-text"
     )
     

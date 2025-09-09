@@ -10,7 +10,7 @@ from typing import Optional, List
 import numpy as np
 import sounddevice as sd
 import webrtcvad
-from faster_whisper import WhisperModel
+import whisper
 
 from .config import default_config
 
@@ -282,22 +282,46 @@ class WhisperSTT:
         self.config = config or default_config
         model_name = model_name or self.config.WHISPER_MODEL
         compute = compute or self.config.WHISPER_COMPUTE
-        device, compute_type = self._select_device(compute)
-        self.model = WhisperModel(model_name, device=device, compute_type=compute_type)
+        self.device = self._select_device(compute)
+        self.model = whisper.load_model(model_name, device=self.device)
 
     def _select_device(self, compute: str):
         if compute == 'auto':
             # Try GPU (cuda) first
             try:
-                import torch  # noqa: F401
-                return 'cuda', 'float16'
+                import torch
+                if torch.cuda.is_available():
+                    return 'cuda'
+                else:
+                    return 'cpu'
             except Exception:
-                return 'cpu', 'int8'
+                return 'cpu'
         if compute == 'cuda':
-            return 'cuda', 'float16'
-        return 'cpu', 'int8'
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    return 'cuda'
+                else:
+                    print("Warning: CUDA requested but not available, falling back to CPU")
+                    return 'cpu'
+            except Exception:
+                print("Warning: CUDA requested but PyTorch not available, falling back to CPU")
+                return 'cpu'
+        return 'cpu'
 
     def transcribe(self, audio: np.ndarray) -> str:
-        segments, info = self.model.transcribe(audio, beam_size=1, vad_filter=False)
-        text_parts = [seg.text.strip() for seg in segments]
-        return ' '.join(part for part in text_parts if part)
+        # Ensure audio is the right format for openai-whisper
+        # openai-whisper expects float32 audio in range [-1, 1]
+        if audio.dtype != np.float32:
+            audio = audio.astype(np.float32)
+        
+        # Ensure audio is normalized to [-1, 1]
+        if audio.max() > 1.0 or audio.min() < -1.0:
+            audio = audio / max(abs(audio.max()), abs(audio.min()))
+        
+        try:
+            result = self.model.transcribe(audio, verbose=False)
+            return result["text"].strip()
+        except Exception as e:
+            print(f"Transcription error: {e}")
+            return ""
