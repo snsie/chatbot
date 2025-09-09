@@ -39,6 +39,7 @@ setup(
         "faster-whisper",
         "ollama",
         "pyttsx3",
+        "pydantic>=2.0.0",
         "asyncio",
     ],
     extras_require={
