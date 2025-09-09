@@ -224,10 +224,10 @@ class StreamingUtteranceDetector:
                         stt is not None and len(collected) >= self.config.MIN_VOICED_FRAMES):
                         
                         # Yield control to event loop without blocking sleep
-                        await asyncio.sleep(0.1)
                         
                         pcm = b''.join(collected)
                         audio = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
+                        
                         
                         try:
                             # Use asyncio.to_thread for better async handling
@@ -239,7 +239,7 @@ class StreamingUtteranceDetector:
                                 prev_transcript_length = len(transcript)
                             elif transcript.strip():  # Only count if we have actual content
                                 # Check if transcript stopped growing
-                                silence_frames_equivalent = transcript_counter - (prev_transcript_length or transcript_counter)
+                                silence_frames_equivalent = transcript_counter * transcript_check_interval
                                 if silence_frames_equivalent >= self.config.TRAILING_SILENCE_FRAMES:
                                     print("Transcript stopped growing, ending utterance.", flush=True)
                                     print('', flush=True)

@@ -51,7 +51,7 @@ class Config(BaseModel):
     )
     
     trailing_silence_ms: int = Field(
-        default=1200,
+        default=1600,
         description="Silence duration to mark end of utterance (ms)",
         ge=50,
         le=2000
