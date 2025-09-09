@@ -71,21 +71,36 @@ Press Ctrl+C to exit cleanly.
 
 SAMPLE_RATE = 16000
 FRAME_MS = 10  # ms per frame for capture + VAD
-VAD_AGGRESSIVENESS = 2  # 0-3 (higher = more aggressive speech detection)
-MIN_UTTERANCE_MS = 300  # minimum voiced audio required to accept an utterance
-TRAILING_SILENCE_MS = 200  # silence to mark end of utterance
+VAD_AGGRESSIVENESS = 3  # 0-3 (higher = more aggressive speech detection)
+MIN_UTTERANCE_MS = 20  # minimum voiced audio required to accept an utterance (increased to reduce noise)
+TRAILING_SILENCE_MS = 400  # silence to mark end of utterance
 
-WHISPER_MODEL = "small.en"
-WHISPER_COMPUTE = "cuda"  # 'auto' | 'cpu' | 'cuda'
+# Additional filtering to reduce false positives from ambient noise
+ENERGY_THRESHOLD = 0.01  # minimum RMS energy level to consider as potential speech
+MIN_CONSECUTIVE_SPEECH_FRAMES = 5  # require consecutive speech frames before starting detection
+FREQUENCY_ANALYSIS = True  # enable spectral analysis to filter keyboard/mouse clicks
+
+# Available faster-whisper models (download automatically):
+# Size vs Quality trade-off:
+# WHISPER_MODEL = "tiny.en"    # Fastest, least accurate
+# WHISPER_MODEL = "base.en"    # Current - good balance
+# WHISPER_MODEL = "small.en"   # Better accuracy, slower
+WHISPER_MODEL = "medium.en"  # Much better accuracy
+# WHISPER_MODEL = "large-v2"   # Best accuracy, slowest
+# WHISPER_MODEL = "large-v3"   # Latest, best overall
+
+# For non-English or multilingual:
+# WHISPER_MODEL = "large-v3"   # Supports 99 languages
+WHISPER_COMPUTE = "auto"  # 'auto' | 'cpu' | 'cuda'
 
 OLLAMA_MODEL = "gpt-oss:20b"
 # OLLAMA_MODEL="llama2:latest"
 # - Use a friendly, conversational tone
-SIMILAR_NAMES=["Cora", "Kora", "Korra", "Quora", "Core", "Cori", "Corey", "Coral",
-            "Corrie", "Cory", "Corin", "Corie", "Corry", "Kory", "Korey", "Kori",
-            "Korrie", "Corah", "Corra", "Corca", "Korla", "Korrah",
-            "Cour", "Cor", "Coor", "Koor", "Korr", "Corr","Quora","Quorra","Quorra","Quora"]
-
+# SIMILAR_NAMES=["Cora", "Kora", "Korra", "Quora", "Core", "Cori", "Corey", "Coral",
+#             "Corrie", "Cory", "Corin", "Corie", "Corry", "Kory", "Korey", "Kori",
+#             "Korrie", "Corah", "Corra", "Corca", "Korla", "Korrah",
+#             "Cour", "Cor", "Coor", "Koor", "Korr", "Corr","Quora","Quorra","Quorra","Quora"]
+SIMILAR_NAMES=["medara","madara","madar","medara","mederra","medarra","medarra","medera",]
 SYSTEM_PROMPT = """
 You are a helpful voice assistant named Cora.
  RESPONSE STYLE INSTRUCTIONS:
@@ -138,9 +153,59 @@ import pyttsx3
 FRAME_SAMPLES = int(SAMPLE_RATE * FRAME_MS / 1000)  # samples per frame (e.g. 480)
 MIN_VOICED_FRAMES = math.ceil(MIN_UTTERANCE_MS / FRAME_MS)
 TRAILING_SILENCE_FRAMES = math.ceil(TRAILING_SILENCE_MS / FRAME_MS)
+MIN_CONSECUTIVE_FRAMES = math.ceil(MIN_CONSECUTIVE_SPEECH_FRAMES)
 print("TRAILING_SILENCE_FRAMES",TRAILING_SILENCE_FRAMES)
+print("MIN_VOICED_FRAMES", MIN_VOICED_FRAMES)
+print("MIN_CONSECUTIVE_FRAMES", MIN_CONSECUTIVE_FRAMES)
 SENTENCE_END_CHARS = "\.\!\?…"  # regex set
 SENTENCE_END_REGEX = re.compile(rf"(.+?[{SENTENCE_END_CHARS}](?:[\"'\)\]]*)\s+)", re.DOTALL)
+
+# =============================
+# Audio Analysis Utilities
+# =============================
+def calculate_rms_energy(frame):
+    """Calculate RMS energy of audio frame."""
+    audio_data = np.frombuffer(frame, dtype=np.int16).astype(np.float32) / 32768.0
+    return np.sqrt(np.mean(audio_data ** 2))
+
+def analyze_frequency_content(frame, sample_rate=SAMPLE_RATE):
+    """Analyze frequency content to distinguish speech from clicks/typing.
+    
+    Returns True if the frequency content suggests speech-like audio.
+    Keyboard typing typically has more high-frequency content and less
+    energy in the speech formant regions (300-3400 Hz).
+    """
+    if not FREQUENCY_ANALYSIS:
+        return True
+    
+    audio_data = np.frombuffer(frame, dtype=np.int16).astype(np.float32) / 32768.0
+    
+    # Perform FFT
+    fft = np.fft.rfft(audio_data)
+    freqs = np.fft.rfftfreq(len(audio_data), 1/sample_rate)
+    magnitude = np.abs(fft)
+    
+    # Speech typically has significant energy in 300-3400 Hz range
+    speech_band_mask = (freqs >= 300) & (freqs <= 3400)
+    high_freq_mask = (freqs > 4000) & (freqs <= 8000)
+    
+    if np.sum(speech_band_mask) == 0 or np.sum(high_freq_mask) == 0:
+        return True  # Can't analyze, default to allowing
+    
+    speech_energy = np.sum(magnitude[speech_band_mask])
+    high_freq_energy = np.sum(magnitude[high_freq_mask])
+    total_energy = np.sum(magnitude)
+    
+    if total_energy == 0:
+        return False
+    
+    # Ratio of speech band energy to total energy should be significant for speech
+    speech_ratio = speech_energy / total_energy
+    high_freq_ratio = high_freq_energy / total_energy
+    
+    # Speech should have more energy in speech band than high frequencies
+    # and significant energy in speech band overall
+    return speech_ratio > 0.2 and speech_ratio > high_freq_ratio * 1.5
 
 # =============================
 # Utterance Detection
@@ -157,6 +222,7 @@ class UtteranceDetector:
 
     def __init__(self, aggressiveness: int = VAD_AGGRESSIVENESS):
         self.vad = webrtcvad.Vad(aggressiveness)
+        self.consecutive_speech_count = 0  # Track consecutive speech frames
 
     def record_once(self, stt) -> Optional[np.ndarray]:
         """Blocking capture of a single utterance. Returns float32 waveform or None.
@@ -189,23 +255,57 @@ class UtteranceDetector:
                     raise
                 if frame is None:
                     continue
+                
+                # Multi-layer speech detection
                 is_speech = False
                 try:
-                    is_speech = self.vad.is_speech(frame, SAMPLE_RATE)
+                    # First check: WebRTC VAD
+                    vad_speech = self.vad.is_speech(frame, SAMPLE_RATE)
+                    
+                    if vad_speech:
+                        # Second check: Energy threshold
+                        energy = calculate_rms_energy(frame)
+                        energy_ok = energy > ENERGY_THRESHOLD
+                        
+                        # Third check: Frequency analysis
+                        freq_ok = analyze_frequency_content(frame)
+                        
+                        # All checks must pass
+                        is_speech = energy_ok and freq_ok
+                        
+                        if is_speech:
+                            self.consecutive_speech_count += 1
+                        else:
+                            self.consecutive_speech_count = 0
+                    else:
+                        self.consecutive_speech_count = 0
+                        
                 except Exception:
-                    # If VAD fails (rare), treat as silence
+                    # If any analysis fails (rare), treat as silence
                     is_speech = False
-                print('1' if is_speech else '0', end='', flush=True)  # Debug: show VAD decisions
+                    self.consecutive_speech_count = 0
+                
+                # For debugging: show VAD decisions and additional info
+                if is_speech:
+                    print('1', end='', flush=True)
+                else:
+                    print('0', end='', flush=True)
                 if not started:
-                    if is_speech:
+                    if is_speech and self.consecutive_speech_count >= MIN_CONSECUTIVE_FRAMES:
                         voiced_count += 1
                         collected.append(frame)
                         if voiced_count >= MIN_VOICED_FRAMES:
                             started = True
+                            print(f"\n🎤 Started recording (consecutive speech: {self.consecutive_speech_count})")
+                    elif is_speech:
+                        # Speech detected but not enough consecutive frames yet
+                        collected.append(frame)
+                        voiced_count += 1
                     else:
                         # Reset (noise or short blips)
                         voiced_count = 0
                         collected.clear()
+                        print(".", end='', flush=True)  # Show we're listening but not recording
                     continue
                 # After started
                 collected.append(frame)
@@ -213,9 +313,14 @@ class UtteranceDetector:
                     silence_count = 0
                 else:
                     silence_count += 1
+                    print('reached silence count:', silence_count)
                     if silence_count >= TRAILING_SILENCE_FRAMES:
+                        print(f"\n🎤 Finished recording (silence: {silence_count})")
                         break  # end of utterance
                 
+        # Reset consecutive speech counter for next utterance
+        self.consecutive_speech_count = 0
+        
         if not collected:
             return None
         # Remove trailing silence frames for cleaner STT input
@@ -634,7 +739,7 @@ async def process_turn(detector: UtteranceDetector, stt: WhisperSTT, convo: Conv
     print(f"You: {transcript}")
     # Remove punctuation and create word list
     transcript_no_punct = transcript.translate(str.maketrans('', '', string.punctuation))
-    words_list = transcript_no_punct.split()
+    words_list = transcript_no_punct.lower().split()
     print(f"Words: {words_list}")
     cora_word_found = False
     for word in words_list:
