@@ -7,32 +7,6 @@ import torch
 #from torch.amp import custom_fwd   # with device_type="cuda"
 from speechbrain.pretrained import EncoderClassifier
 
-
-def embedding(wav_path: str) -> np.ndarray:
-    """Return L2-normalized speaker embedding from a WAV file."""
-    signal = classifier.load_audio(wav_path).unsqueeze(0)  # [1, T]
-    with torch.no_grad():
-        emb = classifier.encode_batch(signal).squeeze(0).squeeze(0)  # [d]
-    v = emb.cpu().numpy()
-    v = v / (np.linalg.norm(v) + 1e-12)
-    return v
-
-def cosine_sim(a: np.ndarray, b: np.ndarray) -> float:
-    return float(np.dot(a, b))
-
-# 1) Build an enrollment gallery
-# Dict of {name: [wav_paths...]}
-gallery = {
-    "Dummy 2": ["data/spk2_snt1.wav", "data/spk2_snt2.wav"],
-    "Dummy 1"  : ["data/spk1_snt2.wav",   "data/spk1_snt3.wav"],
-    "Charlie": ["data/charlie_2.wav", "data/charlie_1.wav"],
-}
-
-enroll = {}
-for name, paths in gallery.items():
-    vecs = [embedding(p) for p in paths]
-    enroll[name] = np.mean(vecs, axis=0)  # centroid per speaker
-
 class _VoiceIdentifier:
     def __init__(self, enroll_path: str = "enrollments.npz"):
         self.model = EncoderClassifier.from_hparams(

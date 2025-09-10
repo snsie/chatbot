@@ -78,7 +78,7 @@ MIN_UTTERANCE_MS = 400  # minimum voiced audio required to accept an utterance
 TRAILING_SILENCE_MS = 800  # silence to mark end of utterance
 
 WHISPER_MODEL = "base.en"
-WHISPER_COMPUTE = "cuda"  # 'auto' | 'cpu' | 'cuda'
+WHISPER_COMPUTE = "cpu"  # 'auto' | 'cpu' | 'cuda'
 
 OLLAMA_MODEL = "gpt-oss:20b"
 # OLLAMA_MODEL="llama2:latest"
@@ -136,7 +136,7 @@ import pyttsx3
 from voice_id import get_voice_identifier
 ENABLE_SPEAKER_GATE = True
 ENROLL_PATH = "enrollments.npz"
-SIM_THRESHOLD = 0.6
+SIM_THRESHOLD = 0.4
 
 voice_identifier = get_voice_identifier(ENROLL_PATH) if ENABLE_SPEAKER_GATE else None
 
