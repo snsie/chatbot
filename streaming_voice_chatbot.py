@@ -8,8 +8,8 @@ with low latency sentence‑by‑sentence TTS while tokens stream from an Ollama
 
 Features
 --------
-1. Microphone capture @ 16 kHz mono (30 ms frames) using sounddevice RawInputStream.
-2. Voice Activity Detection (webrtcvad) to segment utterances.
+1. Microphone capture @ 16 kHz mono (32 ms frames) using sounddevice RawInputStream.
+2. Voice Activity Detection (Silero VAD) to segment utterances with high accuracy.
 3. Speech‑to‑Text via faster-whisper (GPU auto, fallback CPU) on captured utterance.
 4. Streaming LLM responses token-by-token from Ollama (llama3.1:8b-instruct by default).
 5. Sentence segmentation of streaming tokens; each completed sentence immediately sent to TTS.
@@ -25,7 +25,8 @@ Dependencies (pip install ...)
 Core:
   faster-whisper
   sounddevice
-  webrtcvad
+  silero-vad
+  torch
   numpy
   pyttsx3
   ollama
@@ -70,13 +71,13 @@ Press Ctrl+C to exit cleanly.
 # =============================
 
 SAMPLE_RATE = 16000
-FRAME_MS = 10  # ms per frame for capture + VAD
-VAD_AGGRESSIVENESS = 2  # 0-3 (higher = more aggressive speech detection)
+FRAME_MS = 32  # ms per frame for capture + VAD (Silero VAD requires 32ms chunks = 512 samples)
+VAD_THRESHOLD = 0.5  # 0.0-1.0 (higher = more conservative speech detection)
 MIN_UTTERANCE_MS = 300  # minimum voiced audio required to accept an utterance
-TRAILING_SILENCE_MS = 200  # silence to mark end of utterance
+TRAILING_SILENCE_MS = 500  # silence to mark end of utterance
 
 WHISPER_MODEL = "small.en"
-WHISPER_COMPUTE = "cuda"  # 'auto' | 'cpu' | 'cuda'
+WHISPER_COMPUTE = "cpu"  # 'auto' | 'cpu' | 'cuda'
 
 OLLAMA_MODEL = "gpt-oss:20b"
 # OLLAMA_MODEL="llama2:latest"
@@ -123,7 +124,8 @@ from typing import AsyncGenerator, List, Optional, Iterable
 
 import numpy as np
 import sounddevice as sd
-import webrtcvad
+import torch
+from silero_vad import load_silero_vad, get_speech_timestamps
 
 # STT / LLM
 from faster_whisper import WhisperModel
@@ -146,17 +148,51 @@ SENTENCE_END_REGEX = re.compile(rf"(.+?[{SENTENCE_END_CHARS}](?:[\"'\)\]]*)\s+)"
 # Utterance Detection
 # =============================
 class UtteranceDetector:
-    """Segments microphone audio into utterances using WebRTC VAD.
+    """Segments microphone audio into utterances using Silero VAD.
 
     Logic:
-      - Collect 30 ms frames.
+      - Collect 32 ms frames at 16 kHz (512 samples per frame).
+      - Use Silero VAD to detect speech with higher accuracy than WebRTC VAD.
       - Accumulate frames until at least MIN_VOICED_FRAMES voiced frames observed.
       - After start, keep frames until TRAILING_SILENCE_FRAMES consecutive non-voiced frames.
       - Return utterance as float32 numpy array normalized to [-1,1].
     """
 
-    def __init__(self, aggressiveness: int = VAD_AGGRESSIVENESS):
-        self.vad = webrtcvad.Vad(aggressiveness)
+    def __init__(self, threshold: float = VAD_THRESHOLD):
+        self.threshold = threshold
+        self.vad_model = load_silero_vad()
+        # Use GPU if available for faster inference
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.vad_model.to(self.device)
+        print(f"[Silero VAD] Loaded on device: {self.device}")
+
+    def _is_speech(self, audio_chunk: np.ndarray) -> bool:
+        """Check if audio chunk contains speech using Silero VAD.
+        
+        audio_chunk must be exactly 512 samples (32ms at 16kHz) for Silero VAD.
+        """
+        try:
+            # Ensure we have exactly 512 samples
+            if len(audio_chunk) != 512:
+                return False
+                
+            # Convert to torch tensor and ensure correct format
+            audio_tensor = torch.from_numpy(audio_chunk.astype(np.float32))
+            if audio_tensor.dim() == 1:
+                audio_tensor = audio_tensor.unsqueeze(0)  # Add batch dimension
+            
+            # Move to device
+            audio_tensor = audio_tensor.to(self.device)
+            
+            # Get VAD prediction
+            with torch.no_grad():
+                speech_prob = self.vad_model(audio_tensor, 16000).item()
+            
+            return speech_prob > self.threshold
+        except Exception as e:
+            # If VAD fails, treat as silence
+            print(f"[VAD Error] {e}")
+            return False
 
     def record_once(self, stt) -> Optional[np.ndarray]:
         """Blocking capture of a single utterance. Returns float32 waveform or None.
@@ -183,18 +219,14 @@ class UtteranceDetector:
             callback=callback,
         ):
             while True:
-                try:
-                    frame = q.get()
-                except KeyboardInterrupt:
-                    raise
+                frame = q.get()  # Add timeout to allow KeyboardInterrupt
+
                 if frame is None:
-                    continue
-                is_speech = False
-                try:
-                    is_speech = self.vad.is_speech(frame, SAMPLE_RATE)
-                except Exception:
-                    # If VAD fails (rare), treat as silence
-                    is_speech = False
+                    break 
+                # Convert frame to float32 for Silero VAD
+                audio_chunk = np.frombuffer(frame, dtype=np.int16).astype(np.float32) / 32768.0
+                is_speech = self._is_speech(audio_chunk)
+                
                 print('1' if is_speech else '0', end='', flush=True)  # Debug: show VAD decisions
                 if not started:
                     if is_speech:
