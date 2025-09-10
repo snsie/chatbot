@@ -107,8 +107,8 @@ MAX_TOKENS = 512
 
 TTS_BACKEND = "edge-tts"  # 'pyttsx3' | 'edge-tts' | 'coqui'
 # VOICE_NAME = "tts_models/en/vctk/vits"  # substring filter (pyttsx3) or exact edge-tts voice like 'en-US-JennyNeural' or coqui model name
-VOICE_NAME = "en-US-AriaNeural"  # Alternative: en-US-GuyNeural, en-GB-SoniaNeural, en-AU-NatashaNeural
-VOICE_NAME = "en-GB-SoniaNeural"
+VOICE_NAME = "en-US-MichelleNeural"  # Alternative: en-US-GuyNeural, en-GB-SoniaNeural, en-AU-NatashaNeural
+# VOICE_NAME = "en-GB-SoniaNeural"
 
 TAIL_DELAY_SEC = 0.15  # Delay after TTS before returning to mic (reduce capturing own voice)
 PRINT_PARTIAL_SENTENCES = True  # Print sentences as they are spoken
