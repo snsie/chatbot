@@ -136,7 +136,7 @@ import pyttsx3
 from voice_id import get_voice_identifier
 ENABLE_SPEAKER_GATE = True
 ENROLL_PATH = "enrollments.npz"
-SIM_THRESHOLD = 0.4
+SIM_THRESHOLD = 0.6
 
 voice_identifier = get_voice_identifier(ENROLL_PATH) if ENABLE_SPEAKER_GATE else None
 

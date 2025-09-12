@@ -86,7 +86,7 @@ def main():
     p.add_argument("--out", type=Path, default=Path("enrollments.npz"), help="Output .npz path")
     p.add_argument("--savedir", type=Path, default=Path("pretrained_ecapa"), help="Cache dir for SpeechBrain model")
     p.add_argument("--min-clips", type=int, default=2, help="Minimum clips per speaker to include")
-    p.add_argument("--max-clips", type=int, default=5, help="Limit clips per speaker (0 = no limit)")
+    p.add_argument("--max-clips", type=int, default=10, help="Limit clips per speaker (0 = no limit)")
     p.add_argument("--ext", nargs="+", default=["wav"], help="File extensions to include (e.g., wav flac)")
     args = p.parse_args()
 

@@ -1,0 +1,48 @@
+if best_sim < SIM_THRESHOLD:
+    print(f"[Gate] ❌ Deny: best={best_name}, sim={best_sim:.3f}")
+    # --- enroll-on-deny (minimal flow) ---
+    await speaker.speak("I didn’t recognize your voice. Would you like to register it now? Say yes or no.")
+    resp_audio = await asyncio.to_thread(detector.record_once)
+    resp_text = (await asyncio.to_thread(stt.transcribe, resp_audio)).lower() if resp_audio is not None else ""
+    if "yes" not in resp_text and "yeah" not in resp_text and "sure" not in resp_text:
+        await speaker.speak("Okay. Not registering for now.")
+        return
+
+    await speaker.speak("What name should I save this voice under?")
+    name_audio = await asyncio.to_thread(detector.record_once)
+    user_name = (await asyncio.to_thread(stt.transcribe, name_audio)).strip() or "New User"
+    user_dir = Path("data") / user_name
+
+    # Collect a few short enrollment clips (3 by default)
+    prompts = [
+        "Please say: Hello, I am registering my voice.",
+        "Please say: I usually start my morning with coffee.",
+        "Please say: The weather might change later today.",
+    ]
+    collected = []
+    for i, p in enumerate(prompts, start=1):
+        await speaker.speak(p)
+        clip = await asyncio.to_thread(detector.record_once)
+        if clip is not None and len(clip) > 0:
+            # Save raw WAV for reproducible enrollments
+            _save_wav_f32(clip, 16000, user_dir / f"{user_name}_{i}.wav")
+            collected.append(clip)
+
+    if len(collected) < 2:
+        await speaker.speak("I didn’t get enough speech to register. Let’s try again later.")
+        return
+
+    await speaker.speak("Thanks. Updating my voice profiles now.")
+    # Rebuild enrollments using your existing builder (full scan)
+    try:
+        subprocess.run(
+            ["python", "build_enrollments.py", "--root", "data", "--out", "enrollments.npz"],
+            check=True
+        )
+        # Hot-reload into memory
+        voice_identifier.reload_enrollments("enrollments.npz")
+        await speaker.speak(f"All set, {user_name}. Your voice has been registered.")
+    except Exception as e:
+        print(f"[Enroll Build Error] {e}")
+        await speaker.speak("I couldn’t update the profiles. We can try again later.")
+    return
