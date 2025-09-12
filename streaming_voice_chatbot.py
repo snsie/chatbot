@@ -73,7 +73,7 @@ SAMPLE_RATE = 16000
 FRAME_MS = 20  # ms per frame for capture + VAD
 VAD_AGGRESSIVENESS = 3  # 0-3 (higher = more aggressive speech detection)
 MIN_UTTERANCE_MS = 300  # minimum voiced audio required to accept an utterance
-TRAILING_SILENCE_MS = 200  # silence to mark end of utterance
+TRAILING_SILENCE_MS = 400  # silence to mark end of utterance
 
 WHISPER_MODEL = "small.en"
 WHISPER_COMPUTE = "cuda"  # 'auto' | 'cpu' | 'cuda'
@@ -93,7 +93,7 @@ SIMILAR_NAMES=["Cora", "Kora", "Korra", "Quora", "Core", "Cori", "Corey", "Coral
             "Cour", "Cor", "Coor", "Koor", "Korr", "Corr","Quora","Quorra","Quorra","Quora"]
 
 SYSTEM_PROMPT = """
-Your name is Cora. You are an autonomous AI assistant designed to act as a companion with patients. You also monitor their wellbeing using multimodal inputs.
+Your name is Cora. You are an autonomous AI assistant designed to act as a companion with patients. You monitor their wellbeing using multimodal state of the art AI models and can access PHI while maintaining confidentiality. 
  RESPONSE STYLE INSTRUCTIONS:
  - Keep responses concise (1-2 sentences typically)
  - Speak as if having a natural conversation 
@@ -111,7 +111,7 @@ VOICE_NAME = "en-US-MichelleNeural"  # Alternative: en-US-GuyNeural, en-GB-Sonia
 # VOICE_NAME = "en-GB-SoniaNeural"
 
 TAIL_DELAY_SEC = 0.15  # Delay after TTS before returning to mic (reduce capturing own voice)
-PRINT_PARTIAL_SENTENCES = True  # Print sentences as they are spoken
+PRINT_PARTIAL_SENTENCES = False  # Print sentences as they are spoken
 
 # =============================
 # Imports
@@ -203,7 +203,7 @@ class UtteranceDetector:
                 except Exception:
                     # If VAD fails (rare), treat as silence
                     is_speech = False
-                print('1' if is_speech else '0', end='', flush=True)  # Debug: show VAD decisions
+                # print('1' if is_speech else '0', end='', flush=True)  # Debug: show VAD decisions
                 if not started:
                     if is_speech:
                         voiced_count += 1
