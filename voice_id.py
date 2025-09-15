@@ -43,6 +43,17 @@ class _VoiceIdentifier:
         scores = {n: float(np.dot(q, v)) for n, v in self.enroll.items()}
         best_name, best_sim = max(scores.items(), key=lambda kv: kv[1])
         return best_name, best_sim
+    def reload_enrollments(self, path: str = "enrollments.npz"):
+        try:
+            data = np.load(path, allow_pickle=True)
+            names, vecs = data["names"], data["vecs"]
+            self.enroll = {
+                str(n): np.asarray(v, dtype=np.float32)
+                for n, v in zip(names, vecs)
+            }
+            print(f"[VoiceID] Reloaded {len(self.enroll)} speakers from {path}")
+        except Exception as e:
+            print(f"[VoiceID] Reload failed: {e}")
 
 # Singleton accessor so the model loads once per process
 _VI_SINGLETON = None

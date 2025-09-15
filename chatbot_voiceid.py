@@ -134,6 +134,9 @@ import pyttsx3
 
 # Voice ID 
 from voice_id import get_voice_identifier
+from pathlib import Path
+import soundfile as sf
+import subprocess
 ENABLE_SPEAKER_GATE = True
 ENROLL_PATH = "enrollments.npz"
 SIM_THRESHOLD = 0.6
@@ -659,23 +662,69 @@ async def process_turn(detector: UtteranceDetector, stt: WhisperSTT, convo: Conv
         print("🛑 No audio captured.")
         return  # Nothing captured; loop again
     
-
     if ENABLE_SPEAKER_GATE and voice_identifier is not None:
         try:
             best_name, best_sim = voice_identifier.identify_from_array(audio, 16000)
-            if best_name is None:
-                await speaker.speak("I don't have any enrolled voices yet.")
-                return
-            if best_sim < SIM_THRESHOLD:
-                print(f"[Gate] ❌ Deny: best={best_name}, sim={best_sim:.3f}")
-                await speaker.speak("Sorry, I didn’t recognize your voice. Please try again.")
-                return
-            print(f"[Gate] ✅ Allow: {best_name} (sim={best_sim:.3f})")
+            if best_name is None or best_sim < SIM_THRESHOLD:
+                # 1) Ask to enroll
+                await speaker.speak("I didn’t recognize your voice. Would you like to register it now?")
+                # assume yes for this flow; add your own NL intent check if needed.
+
+                # 2) Ask for a display name
+                await speaker.speak("What name should I save this voice under?")
+                name_audio = await asyncio.to_thread(detector.record_once)
+                user_name  = await asyncio.to_thread(stt.transcribe, name_audio)
+                user_name  = user_name.strip()
+                user_dir = Path("data") / user_name
+                user_dir.mkdir(parents=True, exist_ok=True)
+
+                # 3) Collect 3–5 short enrollment utterances (~2–5 s each)
+                prompts = [
+                    "Please say: 'Hello, I’m registering my voice as ...'",
+                    "Please say: 'I usually start my morning with coffee.'",
+                    "Please say: 'Hey Cora, the weather might change later today.'",
+                    "Please say: 'I’m testing this system. Go Gators!'", 
+                ]
+                embs = []
+                for p in prompts[:4]:      # collect 4 by default
+                    await speaker.speak(p)
+                    clip = await asyncio.to_thread(detector.record_once)
+                    if clip is None or len(clip) == 0:
+                        continue
+
+                    # Save raw WAV file under data/<user_name>/<user_name>_i.wav
+                    out_path = user_dir / f"{user_name}_{i}.wav"
+                    sf.write(str(out_path), clip, 16000)
+                    print(f"[Enroll] Saved {out_path}")
+
+                    # Embed for immediate enrollment
+                    emb = voice_identifier.embed_from_array(clip, 16000)
+                    embs.append(emb)
+
+
+                # 4) re runs build_enrollments.py to update enrollments.npz and reload into voice_id memory
+                subprocess.run(
+                    ["python", "build_enrollments.py", "--root", "data", "--out", ENROLL_PATH],
+                    check=True
+                )
+                voice_identifier.reload_enrollments(ENROLL_PATH)
+                await speaker.speak(f"Thanks {user_name}. Your voice has been registered.")
+
+                # 5) Optional immediate re-check
+                await speaker.speak("Say one more sentence to confirm.")
+                confirm = await asyncio.to_thread(detector.record_once)
+                conf_name, conf_sim = voice_identifier.identify_from_array(confirm, 16000)
+                if conf_name == user_name:
+                    await speaker.speak(f"Verification passed with similarity {conf_sim:.2f}.")
+                else:
+                    await speaker.speak("Verification was low; we can add more samples later.")
+            else:
+                print(f"[Gate] ✅ Allow: {best_name} (sim={best_sim:.3f})")
         except Exception as e:
             print(f"[Gate Error] {e}")
             await speaker.speak("Voice check failed. Please try again.")
             return
-        
+
     try:
         print("📝 Transcribing…", flush=True)
         transcript = await asyncio.to_thread(stt.transcribe, audio)
