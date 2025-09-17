@@ -110,6 +110,7 @@ PRINT_PARTIAL_SENTENCES = True  # Print sentences as they are spoken
 # Imports
 # =============================
 import asyncio
+import datetime
 import sys
 import threading
 import queue
@@ -140,8 +141,15 @@ import subprocess
 ENABLE_SPEAKER_GATE = True
 ENROLL_PATH = "enrollments.npz"
 SIM_THRESHOLD = 0.6
-
 voice_identifier = get_voice_identifier(ENROLL_PATH) if ENABLE_SPEAKER_GATE else None
+
+# Mongo DB for logging
+from pymongo import MongoClient
+from scipy.signal import resample_poly
+
+MONGO_URI = "mongodb://admin:Rob123%21@localhost:27017/admin"
+mongo = MongoClient(MONGO_URI)
+people = mongo["voice_db"]["people"]  # single collection for profiles
 
 
 # =============================
@@ -686,7 +694,7 @@ async def process_turn(detector: UtteranceDetector, stt: WhisperSTT, convo: Conv
                     "Please say: 'I’m testing this system. Go Gators!'", 
                 ]
                 embs = []
-                for p in prompts[:4]:      # collect 4 by default
+                for i, p in enumerate(prompts[:4]):      # collect 4 by default
                     await speaker.speak(p)
                     clip = await asyncio.to_thread(detector.record_once)
                     if clip is None or len(clip) == 0:
@@ -696,11 +704,7 @@ async def process_turn(detector: UtteranceDetector, stt: WhisperSTT, convo: Conv
                     out_path = user_dir / f"{user_name}_{i}.wav"
                     sf.write(str(out_path), clip, 16000)
                     print(f"[Enroll] Saved {out_path}")
-
-                    # Embed for immediate enrollment
-                    emb = voice_identifier.embed_from_array(clip, 16000)
-                    embs.append(emb)
-
+                    
 
                 # 4) re runs build_enrollments.py to update enrollments.npz and reload into voice_id memory
                 subprocess.run(
@@ -708,6 +712,33 @@ async def process_turn(detector: UtteranceDetector, stt: WhisperSTT, convo: Conv
                     check=True
                 )
                 voice_identifier.reload_enrollments(ENROLL_PATH)
+
+                # 5) Read the centroid for this user from enrollments.npz and upsert ONE Mongo doc
+                npz = np.load(ENROLL_PATH, allow_pickle=True)  # has arrays: names, vecs :contentReference[oaicite:3]{index=3}
+                names, vecs = npz["names"], npz["vecs"]
+                centroid = None
+                for n, v in zip(names, vecs):
+                    if str(n) == user_name:
+                        centroid = v
+                        break
+                if centroid is None:
+                    await speaker.speak("I couldn’t finalize your enrollment. Please try again later.")
+                    return
+
+                people.update_one(
+                    {"name": user_name},
+                    {"$set": {
+                        "current_embedding": {
+                            "vec": centroid.tolist(),
+                            "model": "speechbrain/ecapa-voxceleb",
+                            "updated_at": datetime.utcnow(),
+                        },
+                    },
+                    },
+                    upsert=True
+                )
+                
+                
                 await speaker.speak(f"Thanks {user_name}. Your voice has been registered.")
 
                 # 5) Optional immediate re-check

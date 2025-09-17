@@ -13,3 +13,11 @@ if ENABLE_SPEAKER_GATE and voice_identifier is not None:
             print(f"[Gate Error] {e}")
             await speaker.speak("Voice check failed. Please try again.")
             return
+
+
+
+line 707 in chatbot_voice
+# Embed for immediate enrollment
+                    emb = voice_identifier.embed_from_array(clip, 16000)
+                    embs.append(emb)
+taken out cause embed from py file later in script
