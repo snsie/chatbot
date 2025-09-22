@@ -146,6 +146,7 @@ voice_identifier = get_voice_identifier(ENROLL_PATH) if ENABLE_SPEAKER_GATE else
 # Mongo DB for logging
 from pymongo import MongoClient
 from scipy.signal import resample_poly
+import re
 
 MONGO_URI = "mongodb://admin:Rob123%21@localhost:27017/admin"
 mongo = MongoClient(MONGO_URI)
@@ -676,13 +677,20 @@ async def process_turn(detector: UtteranceDetector, stt: WhisperSTT, convo: Conv
             if best_name is None or best_sim < SIM_THRESHOLD:
                 # 1) Ask to enroll
                 await speaker.speak("I didn’t recognize your voice. Would you like to register it now?")
-                # assume yes for this flow; add your own NL intent check if needed.
-
+                
+                resp_audio = await asyncio.to_thread(detector.record_once)
+                resp_text  = (await asyncio.to_thread(stt.transcribe, resp_audio)).strip().lower() if resp_audio is not None else ""
+                if not any(k in resp_text for k in ["yes", "yeah", "yep", "sure", "ok", "okay"]):
+                    await speaker.speak("Okay, I won't enroll right now.")
+                    return
+                
                 # 2) Ask for a display name
                 await speaker.speak("What name should I save this voice under?")
                 name_audio = await asyncio.to_thread(detector.record_once)
                 user_name  = await asyncio.to_thread(stt.transcribe, name_audio)
                 user_name  = user_name.strip()
+                user_name = re.sub(r"[^\w\s-]", "", user_name) # remove special chars
+                user_name = re.sub(r"\s+", " ", user_name)
                 user_dir = Path("data") / user_name
                 user_dir.mkdir(parents=True, exist_ok=True)
 
