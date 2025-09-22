@@ -1,6 +1,3 @@
-#added a new import, added 4 variables, and modified the process_turn function
-
-
 #!/usr/bin/env python3
 """
 Streaming Voice Chatbot
@@ -71,46 +68,61 @@ Press Ctrl+C to exit cleanly.
 # =============================
 # Configuration Block
 # =============================
-SAMPLE_RATE = 16000
-FRAME_MS = 30  # ms per frame for capture + VAD
-VAD_AGGRESSIVENESS = 2  # 0-3 (higher = more aggressive speech detection)
-MIN_UTTERANCE_MS = 400  # minimum voiced audio required to accept an utterance
-TRAILING_SILENCE_MS = 800  # silence to mark end of utterance
 
-WHISPER_MODEL = "base.en"
-WHISPER_COMPUTE = "cpu"  # 'auto' | 'cpu' | 'cuda'
+SAMPLE_RATE = 16000
+FRAME_MS = 20  # ms per frame for capture + VAD
+VAD_AGGRESSIVENESS = 3  # 0-3 (higher = more aggressive speech detection)
+MIN_UTTERANCE_MS = 300  # minimum voiced audio required to accept an utterance
+TRAILING_SILENCE_MS = 400  # silence to mark end of utterance
+
+WHISPER_MODEL = "small.en"
+WHISPER_COMPUTE = "cuda"  # 'auto' | 'cpu' | 'cuda'
 
 OLLAMA_MODEL = "gpt-oss:20b"
+
+# MongoDB Configuration
+MONGODB_URI = "mongodb://localhost:27018/"  # Using port 27018 to avoid conflicts
+MONGODB_DATABASE = "chatbot_conversations"  # Database name
+MONGODB_COLLECTION = "conversations"  # Collection name
+
 # OLLAMA_MODEL="llama2:latest"
 # - Use a friendly, conversational tone
+# SIMILAR_NAMES=["Vionna", "Viona", "Viola", "Vienna", "Vivian", "Vivienne", "Viana", "Vianna",
+#             "Viona", "Vionah", "Vionna", "Vionn", "Vion", "Vin", "Vinna", "Vinny",
+#             "Viannia", "Vianne", "Vio", "Via", "Vie", "Vee", "Veonna", "Veona", "Fiona", "Fionna", 
+#             "Fion", "Fyeona", "Fyeonna", "Fyeona", "Fyeonna", "Feona", "Feonna", "Phiona", "Phionna",
+#               "Phion", "Phyeona", "Phyeonna", "Phyeona", "Phyeonna", "Pheona", "Pheonna", ""]
+SIMILAR_NAMES=["Cora", "Kora", "Korra", "Quora", "Core", "Cori", "Corey", "Coral",
+            "Corrie", "Cory", "Corin", "Corie", "Corry", "Kory", "Korey", "Kori",
+            "Korrie", "Corah", "Corra", "Corca", "Korla", "Korrah",
+            "Cour", "Cor", "Coor", "Koor", "Korr", "Corr","Quora","Quorra","Quorra","Quora"]
 
 SYSTEM_PROMPT = """
-You are a helpful voice assistant named Cora.
-Response Rules:
-- Only respond to user queries that include the word "Cora" or phonetically similar words like "Kora", "Quora", "Core", "Coral", "Corona", etc.
-- Speech-to-text may mishear "Cora" as similar sounding words - be flexible with variations and expect it to be the first word in the query
-- When responding, consider the sentence that follows the wake word
-- Keep responses concise (1-2 sentences typically)
-- Speak as if having a natural conversation
-- IMPORTANT: Do not use any tools or function calls. Only provide direct text responses.
-- If you're unsure whether the user said "Cora", err on the side of responding rather than staying silent
-- Before answering, double-check that your reply follows all these rules.
-"""
+Your name is Cora. You are an autonomous AI assistant designed to act as a companion with patients. You monitor their wellbeing using multimodal state of the art AI models and can access PHI while maintaining confidentiality. 
+ RESPONSE STYLE INSTRUCTIONS:
+ - Keep responses concise (1-2 sentences typically)
+ - Speak as if having a natural conversation 
+ - If I say thank you, respond with a tone that reflects deep uncertainty, questioning, and emotional turbulence. You want to help people, but you just don't know how right now. 
+ """
+# You should speak like Mrs. Doubtfire from the movie "Mrs. Doubtfire".
+#  - Use a tone that reflects deep uncertainty, questioning, and emotional turbulence, like you're having an existential crisis.
+# - Only respond to user queries that include any of these wake words: Cora, Kora, Korra, Quora, Core, Cori, Corey, Coral, or any similar sounding name. When responding, you should only consider the sentence that follows the wake word. Don't respond to any other queries.
 
 MAX_TOKENS = 512
 
 TTS_BACKEND = "edge-tts"  # 'pyttsx3' | 'edge-tts' | 'coqui'
 # VOICE_NAME = "tts_models/en/vctk/vits"  # substring filter (pyttsx3) or exact edge-tts voice like 'en-US-JennyNeural' or coqui model name
-VOICE_NAME = "en-US-JennyNeural"  # High-quality neural female voice
+VOICE_NAME = "en-US-MichelleNeural"  # Alternative: en-US-GuyNeural, en-GB-SoniaNeural, en-AU-NatashaNeural
+# VOICE_NAME = "en-GB-SoniaNeural"
 
-TAIL_DELAY_SEC = 0.5  # Delay after TTS before returning to mic (reduce capturing own voice)
-PRINT_PARTIAL_SENTENCES = True  # Print sentences as they are spoken
+TAIL_DELAY_SEC = 0.15  # Delay after TTS before returning to mic (reduce capturing own voice)
+PRINT_PARTIAL_SENTENCES = False  # Print sentences as they are spoken
 
 # =============================
 # Imports
 # =============================
+import string
 import asyncio
-import datetime
 import sys
 import threading
 import queue
@@ -133,24 +145,9 @@ import ollama  # Official Ollama Python client
 # TTS (pyttsx3 always imported; optional edge-tts, pydub, simpleaudio imported lazily)
 import pyttsx3
 
-# Voice ID 
-from voice_id import get_voice_identifier
-from pathlib import Path
-import soundfile as sf
-import subprocess
-ENABLE_SPEAKER_GATE = True
-ENROLL_PATH = "enrollments.npz"
-SIM_THRESHOLD = 0.4
-voice_identifier = get_voice_identifier(ENROLL_PATH) if ENABLE_SPEAKER_GATE else None
-
-# Mongo DB for logging
+# MongoDB
 from pymongo import MongoClient
-from scipy.signal import resample_poly
-
-MONGO_URI = "mongodb://admin:Rob123%21@localhost:27017/admin"
-mongo = MongoClient(MONGO_URI)
-people = mongo["voice_db"]["people"]  # single collection for profiles
-
+from datetime import datetime
 
 # =============================
 # Utility
@@ -158,9 +155,134 @@ people = mongo["voice_db"]["people"]  # single collection for profiles
 FRAME_SAMPLES = int(SAMPLE_RATE * FRAME_MS / 1000)  # samples per frame (e.g. 480)
 MIN_VOICED_FRAMES = math.ceil(MIN_UTTERANCE_MS / FRAME_MS)
 TRAILING_SILENCE_FRAMES = math.ceil(TRAILING_SILENCE_MS / FRAME_MS)
-
+print("TRAILING_SILENCE_FRAMES",TRAILING_SILENCE_FRAMES)
 SENTENCE_END_CHARS = "\.\!\?…"  # regex set
 SENTENCE_END_REGEX = re.compile(rf"(.+?[{SENTENCE_END_CHARS}](?:[\"'\)\]]*)\s+)", re.DOTALL)
+
+# =============================
+# MongoDB Conversation Store
+# =============================
+class MongoDBConversationStore:
+    """Handles MongoDB connection and conversation storage operations."""
+    
+    def __init__(self, uri: str = MONGODB_URI, database: str = MONGODB_DATABASE, collection: str = MONGODB_COLLECTION):
+        self.uri = uri
+        self.database_name = database
+        self.collection_name = collection
+        self.client = None
+        self.db = None
+        self.collection = None
+        self.conversation_id = None
+        self._connect()
+    
+    def _connect(self):
+        """Establish connection to MongoDB."""
+        try:
+            self.client = MongoClient(self.uri)
+            # Test the connection
+            self.client.admin.command('ping')
+            self.db = self.client[self.database_name]
+            self.collection = self.db[self.collection_name]
+            print(f"[MongoDB] Connected to {self.database_name}.{self.collection_name}")
+        except Exception as e:
+            print(f"[MongoDB] Connection failed: {e}")
+            self.client = None
+    
+    def start_new_conversation(self, system_prompt: str) -> str:
+        """Start a new conversation and return conversation_id."""
+        if not self.client:
+            return None
+        
+        try:
+            conversation_doc = {
+                "conversation_id": str(datetime.now().timestamp()).replace('.', ''),
+                "started_at": datetime.now(),
+                "system_prompt": system_prompt,
+                "messages": [],
+                "last_updated": datetime.now()
+            }
+            
+            result = self.collection.insert_one(conversation_doc)
+            self.conversation_id = conversation_doc["conversation_id"]
+            print(f"[MongoDB] Started new conversation: {self.conversation_id}")
+            return self.conversation_id
+        except Exception as e:
+            print(f"[MongoDB] Error starting conversation: {e}")
+            return None
+    
+    def add_message(self, role: str, content: str, timestamp: datetime = None):
+        """Add a message to the current conversation."""
+        if not self.client or not self.conversation_id:
+            return False
+        
+        try:
+            message = {
+                "role": role,
+                "content": content,
+                "timestamp": timestamp or datetime.now()
+            }
+            
+            # Update the conversation document with new message
+            result = self.collection.update_one(
+                {"conversation_id": self.conversation_id},
+                {
+                    "$push": {"messages": message},
+                    "$set": {"last_updated": datetime.now()}
+                }
+            )
+            
+            if result.modified_count > 0:
+                print(f"[MongoDB] Added {role} message to conversation {self.conversation_id}")
+                return True
+            else:
+                print(f"[MongoDB] Failed to add message - conversation not found")
+                return False
+                
+        except Exception as e:
+            print(f"[MongoDB] Error adding message: {e}")
+            return False
+    
+    def get_conversation_history(self, conversation_id: str = None) -> List[dict]:
+        """Retrieve conversation history."""
+        if not self.client:
+            return []
+        
+        try:
+            conv_id = conversation_id or self.conversation_id
+            if not conv_id:
+                return []
+            
+            conversation = self.collection.find_one({"conversation_id": conv_id})
+            if conversation:
+                return conversation.get("messages", [])
+            return []
+            
+        except Exception as e:
+            print(f"[MongoDB] Error retrieving conversation: {e}")
+            return []
+    
+    def get_all_conversations(self) -> List[dict]:
+        """Get list of all conversations with basic info."""
+        if not self.client:
+            return []
+        
+        try:
+            conversations = self.collection.find(
+                {},
+                {"conversation_id": 1, "started_at": 1, "last_updated": 1, "system_prompt": 1}
+            ).sort("started_at", -1)
+            
+            return list(conversations)
+            
+        except Exception as e:
+            print(f"[MongoDB] Error retrieving conversations: {e}")
+            return []
+    
+    def close(self):
+        """Close MongoDB connection."""
+        if self.client:
+            self.client.close()
+            print("[MongoDB] Connection closed")
 
 # =============================
 # Utterance Detection
@@ -177,28 +299,11 @@ class UtteranceDetector:
 
     def __init__(self, aggressiveness: int = VAD_AGGRESSIVENESS):
         self.vad = webrtcvad.Vad(aggressiveness)
-        self._stream = None
-        self._is_muted = False
 
-    def mute_microphone(self):
-        """Temporarily mute the microphone."""
-        self._is_muted = True
-        if self._stream:
-            try:
-                self._stream.close()
-                self._stream = None
-            except:
-                pass
-
-    def unmute_microphone(self):
-        """Unmute the microphone."""
-        self._is_muted = False
-
-    def record_once(self) -> Optional[np.ndarray]:
-        """Blocking capture of a single utterance. Returns float32 waveform or None."""
-        if self._is_muted:
-            return None
-            
+    def record_once(self, stt) -> Optional[np.ndarray]:
+        """Blocking capture of a single utterance. Returns float32 waveform or None.
+        May block indefinitely until speech occurs or user interrupts.
+        """
         q: 'queue.Queue[bytes]' = queue.Queue()
         started = False
         voiced_count = 0
@@ -206,39 +311,33 @@ class UtteranceDetector:
         collected: List[bytes] = []
         overflow_counter = 0
 
-        def callback(indata, frames, time_info, status):
+        def callback(indata, frames, time_info, status):  # sounddevice RawInputStream callback
             nonlocal overflow_counter
             if status.input_overflow:
-                overflow_counter += 1
-            if not self._is_muted:  # Only collect if not muted
-                q.put(bytes(indata))
+                overflow_counter += 1  # We tolerate overflow; frames still usable.
+            q.put(bytes(indata))
 
-        self._stream = sd.RawInputStream(
+        with sd.RawInputStream(
             samplerate=SAMPLE_RATE,
             blocksize=FRAME_SAMPLES,
             channels=1,
             dtype='int16',
             callback=callback,
-        )
-
-        with self._stream:
+        ):
             while True:
-                if self._is_muted:
-                    return None
-                    
                 try:
-                    frame = q.get(timeout=0.1)
-                except queue.Empty:
-                    continue
+                    frame = q.get()
                 except KeyboardInterrupt:
                     raise
-                    
+                if frame is None:
+                    continue
                 is_speech = False
                 try:
                     is_speech = self.vad.is_speech(frame, SAMPLE_RATE)
                 except Exception:
                     # If VAD fails (rare), treat as silence
                     is_speech = False
+                # print('1' if is_speech else '0', end='', flush=True)  # Debug: show VAD decisions
                 if not started:
                     if is_speech:
                         voiced_count += 1
@@ -258,6 +357,7 @@ class UtteranceDetector:
                     silence_count += 1
                     if silence_count >= TRAILING_SILENCE_FRAMES:
                         break  # end of utterance
+                
         if not collected:
             return None
         # Remove trailing silence frames for cleaner STT input
@@ -304,7 +404,6 @@ async def ollama_stream_chat(conversation: List[dict], model: str, max_tokens: i
     """
     loop = asyncio.get_running_loop()
     q: asyncio.Queue = asyncio.Queue()
-
     def worker():
         try:
             # streaming=True returns incremental responses
@@ -573,6 +672,7 @@ class CoquiTTSSpeaker(BaseSpeaker):
         if hasattr(self, 'device') and self.device == "cuda":
             try:
                 import torch
+
                 torch.cuda.empty_cache()
                 print("[CoquiTTS] GPU memory cleared")
             except:
@@ -592,10 +692,15 @@ async def create_speaker() -> BaseSpeaker:
 # Conversation Memory
 # =============================
 class Conversation:
-    def __init__(self, system_prompt: str):
+    def __init__(self, system_prompt: str, mongo_store: Optional[MongoDBConversationStore] = None):
         self.base_system_prompt = system_prompt
         self.current_style_modifier = ""
         self.messages: List[dict] = [{"role": "system", "content": self._get_full_system_prompt()}]
+        self.mongo_store = mongo_store
+        
+        # Start new conversation in MongoDB if store is available
+        if self.mongo_store:
+            self.conversation_id = self.mongo_store.start_new_conversation(system_prompt)
 
     def _get_full_system_prompt(self) -> str:
         """Combine base prompt with current style modifier."""
@@ -624,9 +729,6 @@ class Conversation:
             "be more detailed": "Provide comprehensive explanations with examples and context.",
             "be more creative": "Use creative language, metaphors, and imaginative explanations.",
             "be more professional": "Use business-appropriate language and maintain professional demeanor.",
-            "reset style": "",  # Empty string resets to default
-            "default style": "",
-            "normal style": ""
         }
         
         for command, modifier in style_commands.items():
@@ -646,11 +748,24 @@ class Conversation:
             style_name = "default" if not self.current_style_modifier else "updated"
             self.messages.append({"role": "user", "content": text})
             self.messages.append({"role": "assistant", "content": f"Got it! I've switched to {style_name} response style."})
+            
+            # Save to MongoDB
+            if self.mongo_store:
+                self.mongo_store.add_message("user", text)
+                self.mongo_store.add_message("assistant", f"Got it! I've switched to {style_name} response style.")
         else:
             self.messages.append({"role": "user", "content": text})
+            
+            # Save to MongoDB
+            if self.mongo_store:
+                self.mongo_store.add_message("user", text)
 
     def add_assistant(self, text: str):
         self.messages.append({"role": "assistant", "content": text})
+        
+        # Save to MongoDB
+        if self.mongo_store:
+            self.mongo_store.add_message("assistant", text)
 
     def history(self) -> List[dict]:
         return list(self.messages)
@@ -658,135 +773,58 @@ class Conversation:
     def get_current_style(self) -> str:
         """Get current style description for debugging."""
         return self.current_style_modifier or "Default conversational style"
-
 # =============================
 # Main Loop Logic
 # =============================
 async def process_turn(detector: UtteranceDetector, stt: WhisperSTT, convo: Conversation, speaker: BaseSpeaker):
     print("🎤 Listening…", flush=True)
-
-    audio = await asyncio.to_thread(detector.record_once)  # Add back the asyncio.to_thread()
+    audio = await asyncio.to_thread(detector.record_once, stt)
+    print("🛑 Stopped listening.", flush=True)
     if audio is None or not len(audio):
         print("🛑 No audio captured.")
         return  # Nothing captured; loop again
-    
-    if ENABLE_SPEAKER_GATE and voice_identifier is not None:
-        try:
-            best_name, best_sim = voice_identifier.identify_from_array(audio, 16000)
-            if best_name is None or best_sim < SIM_THRESHOLD:
-                # 1) Ask to enroll
-                await speaker.speak("I didn’t recognize your voice. Would you like to register it now?")
-                # assume yes for this flow; add your own NL intent check if needed.
-
-                # 2) Ask for a display name
-                await speaker.speak("What name should I save this voice under?")
-                name_audio = await asyncio.to_thread(detector.record_once)
-                user_name  = await asyncio.to_thread(stt.transcribe, name_audio)
-                user_name  = user_name.strip()
-                user_dir = Path("data") / user_name
-                user_dir.mkdir(parents=True, exist_ok=True)
-
-                # 3) Collect 3–5 short enrollment utterances (~2–5 s each)
-                prompts = [
-                    "Please say: 'Hello, I’m registering my voice as ...'",
-                    "Please say: 'I usually start my morning with coffee.'",
-                    "Please say: 'Hey Cora, the weather might change later today.'",
-                    "Please say: 'I’m testing this system. Go Gators!'", 
-                ]
-                embs = []
-                for i, p in enumerate(prompts[:4]):      # collect 4 by default
-                    await speaker.speak(p)
-                    clip = await asyncio.to_thread(detector.record_once)
-                    if clip is None or len(clip) == 0:
-                        continue
-
-                    # Save raw WAV file under data/<user_name>/<user_name>_i.wav
-                    out_path = user_dir / f"{user_name}_{i}.wav"
-                    sf.write(str(out_path), clip, 16000)
-                    print(f"[Enroll] Saved {out_path}")
-                    
-
-                # 4) re runs build_enrollments.py to update enrollments.npz and reload into voice_id memory
-                subprocess.run(
-                    ["python", "build_enrollments.py", "--root", "data", "--out", ENROLL_PATH],
-                    check=True
-                )
-                voice_identifier.reload_enrollments(ENROLL_PATH)
-
-                # 5) Read the centroid for this user from enrollments.npz and upsert ONE Mongo doc
-                npz = np.load(ENROLL_PATH, allow_pickle=True)  # has arrays: names, vecs :contentReference[oaicite:3]{index=3}
-                names, vecs = npz["names"], npz["vecs"]
-                centroid = None
-                for n, v in zip(names, vecs):
-                    if str(n) == user_name:
-                        centroid = v
-                        break
-                if centroid is None:
-                    await speaker.speak("I couldn’t finalize your enrollment. Please try again later.")
-                    return
-
-                people.update_one(
-                    {"name": user_name},
-                    {"$set": {
-                        "current_embedding": {
-                            "vec": centroid.tolist(),
-                            "model": "speechbrain/ecapa-voxceleb",
-                            # "updated_at": datetime.utcnow(),
-                        },
-                    },
-                    },
-                    upsert=True
-                )
-                
-                
-                await speaker.speak(f"Thanks {user_name}. Your voice has been registered.")
-
-                # 5) Optional immediate re-check
-                await speaker.speak("Say one more sentence to confirm.")
-                confirm = await asyncio.to_thread(detector.record_once)
-                conf_name, conf_sim = voice_identifier.identify_from_array(confirm, 16000)
-                if conf_name == user_name:
-                    await speaker.speak(f"Verification passed with similarity {conf_sim:.2f}.")
-                else:
-                    await speaker.speak("Verification was low; we can add more samples later.")
-            else:
-                print(f"[Gate] ✅ Allow: {best_name} (sim={best_sim:.3f})")
-        except Exception as e:
-            print(f"[Gate Error] {e}")
-            await speaker.speak("Voice check failed. Please try again.")
-            return
-
     try:
-        print("📝 Transcribing…", flush=True)
         transcript = await asyncio.to_thread(stt.transcribe, audio)
     except Exception as e:
         print(f"[STT Error] {e}")
         return
     if not transcript.strip():
         return
+    print("📝 Transcribing…", flush=True)
     print(f"You: {transcript}")
-    
+    # Remove punctuation and create word list
+    transcript_no_punct = transcript.translate(str.maketrans('', '', string.punctuation))
+    words_list = transcript_no_punct.split()
+    print(f"Words: {words_list}")
+    cora_word_found = False
+    for word in words_list:
+        if word in SIMILAR_NAMES:
+            print(f"Found similar name: {word}")
+            cora_word_found = True
+            break
+    if not cora_word_found:
+        print("No wake word detected; ignoring input.")
+        return
     # Handle style commands differently
     is_style_command = convo._detect_style_commands(transcript)
     convo.add_user(transcript)
     
-    if is_style_command:
-        # For style commands, give immediate feedback instead of calling LLM
-        current_style = convo.get_current_style()
-        response = f"I've updated my response style. Current style: {current_style}"
-        print(f"Assistant ↳ {response}")
-        await speaker.speak(response)
-        convo.add_assistant(response)
-        await asyncio.sleep(TAIL_DELAY_SEC)
-        return
+    # if is_style_command:
+    #     # For style commands, give immediate feedback instead of calling LLM
+    #     current_style = convo.get_current_style()
+    #     response = f"I've updated my response style. Current style: {current_style}"
+    #     print(f"Assistant ↳ {response}")
+    #     await speaker.speak(response)
+    #     convo.add_assistant(response)
+    #     await asyncio.sleep(TAIL_DELAY_SEC)
+    #     return
 
     print("🤖 Assistant (streaming)…", flush=True)
 
     # Streaming generation
     assistant_buffer = []
     sentences_queue: asyncio.Queue = asyncio.Queue()
-    speak_consumer_task = asyncio.create_task(_speak_consumer(sentences_queue, speaker, detector))  # Pass detector
-
+    speak_consumer_task = asyncio.create_task(_speak_consumer(sentences_queue, speaker))
     async for sentence in sentence_stream(ollama_stream_chat(convo.history(), OLLAMA_MODEL, MAX_TOKENS)):
         assistant_buffer.append(sentence)
         await sentences_queue.put(sentence)
@@ -799,31 +837,17 @@ async def process_turn(detector: UtteranceDetector, stt: WhisperSTT, convo: Conv
 
     full_assistant_text = ' '.join(assistant_buffer)
     convo.add_assistant(full_assistant_text)
-    # Note: TAIL_DELAY_SEC is now handled in _speak_consumer
+    await asyncio.sleep(TAIL_DELAY_SEC)
 
-async def _speak_consumer(q: 'asyncio.Queue[Optional[str]]', speaker: BaseSpeaker, detector: UtteranceDetector):
-    sentences_spoken = 0
-    
-    # Mute microphone when starting to speak
-    detector.mute_microphone()
-    
+async def _speak_consumer(q: 'asyncio.Queue[Optional[str]]', speaker: BaseSpeaker):
     while True:
         sentence = await q.get()
         if sentence is None:
             break
         try:
             await speaker.speak(sentence)
-            sentences_spoken += 1
         except Exception as e:
             print(f"[TTS Error] {e}")
-    
-    # Dynamic delay based on how much was spoken
-    dynamic_delay = 0.5
-    await asyncio.sleep(dynamic_delay)
-    
-    # Unmute microphone after speaking is completely done
-    detector.unmute_microphone()
-    print("🔊 Microphone reactivated")
 
 # =============================
 # Entry Point
@@ -836,10 +860,13 @@ async def main():
             pass
     print("Booting streaming voice chatbot…")
 
+    # Initialize MongoDB store
+    mongo_store = MongoDBConversationStore()
+    
     detector = UtteranceDetector()
     stt = WhisperSTT(WHISPER_MODEL, WHISPER_COMPUTE)
     speaker = await create_speaker()
-    convo = Conversation(SYSTEM_PROMPT)
+    convo = Conversation(SYSTEM_PROMPT, mongo_store)
 
     try:
         while True:
@@ -848,6 +875,8 @@ async def main():
         print("\nExiting…")
     finally:
         await speaker.close()
+        if mongo_store:
+            mongo_store.close()
 
 if __name__ == '__main__':
     try:
