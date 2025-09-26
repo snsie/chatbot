@@ -111,6 +111,7 @@ PRINT_PARTIAL_SENTENCES = True  # Print sentences as they are spoken
 # =============================
 import asyncio
 import datetime
+from datetime import datetime, timezone
 import sys
 import threading
 import queue
@@ -152,6 +153,19 @@ MONGO_URI = "mongodb://admin:Rob123%21@localhost:27017/admin"
 mongo = MongoClient(MONGO_URI)
 people = mongo["voice_db"]["people"]  # single collection for profiles
 
+# pydantic setup
+from pydantic import BaseModel, Field, ValidationError
+from typing import List
+
+class EmbeddingData(BaseModel):
+    vec: List[float]
+    model: str
+
+class Person(BaseModel):
+    name: str
+    current_embedding: EmbeddingData
+    file_path: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 # =============================
 # Utility
@@ -732,19 +746,41 @@ async def process_turn(detector: UtteranceDetector, stt: WhisperSTT, convo: Conv
                 if centroid is None:
                     await speaker.speak("I couldn’t finalize your enrollment. Please try again later.")
                     return
-
-                people.update_one(
-                    {"name": user_name},
-                    {"$set": {
+                
+                try:
+                    print("insidee try")
+                    person_data = {
+                        "name": user_name,
                         "current_embedding": {
                             "vec": centroid.tolist(),
-                            "model": "speechbrain/ecapa-voxceleb",
-                            # "updated_at": datetime.utcnow(),
+                            "model": "speechbrain/ecapa-voxceleb"
                         },
-                    },
-                    },
-                    upsert=True
-                )
+                        "file_path": str(user_dir),
+                        # created_at is auto-set by Pydantic at object creation
+                    }
+                    
+                    # Validate with Pydantic --> creating Person object that checks against types of person_data
+                    person = Person(**person_data)
+                    
+                    # insert into mongodb if successful validation of data types
+                    people.update_one(
+                        {"name": user_name},
+                        {"$set": {
+                            "current_embedding": {
+                                "vec": person.current_embedding.vec,
+                                "model": person.current_embedding.model
+                            },
+                            "file_path": person.file_path,
+                            "created_at": person.created_at,
+                        }},
+                        upsert=True
+                    )
+                    print("success")
+                    
+                except ValidationError as e:
+                    await speaker.speak("Error saving your voice profile. Please try again.")
+                    print(f"Pydantic validation error: {e}")
+                    return
                 
                 
                 await speaker.speak(f"Thanks {user_name}. Your voice has been registered.")
@@ -759,6 +795,7 @@ async def process_turn(detector: UtteranceDetector, stt: WhisperSTT, convo: Conv
                     await speaker.speak("Verification was low; we can add more samples later.")
             else:
                 print(f"[Gate] ✅ Allow: {best_name} (sim={best_sim:.3f})")
+                await speaker.speak(f"Sure {best_name}.")
         except Exception as e:
             print(f"[Gate Error] {e}")
             await speaker.speak("Voice check failed. Please try again.")
