@@ -1,78 +1,87 @@
-# --- imports ---
+import torch, torchaudio, soundfile as sf
 from pathlib import Path
-import numpy as np
-import torch
-import torchaudio
-import os, warnings
 from speechbrain.inference.separation import SepformerSeparation as Separator
-# Hide most warnings (keep this first)
-warnings.filterwarnings("ignore", category=UserWarning, module="torchaudio")
-warnings.filterwarnings("ignore", category=UserWarning, module="speechbrain")
-warnings.filterwarnings("ignore", category=FutureWarning, module="speechbrain")
-# (Optional) nuke all warnings:
-# warnings.simplefilter("ignore")
-# or via env: os.environ["PYTHONWARNINGS"] = "ignore"
-# Use the new SpeechBrain import path (pretrained -> inference)
-from speechbrain.inference import EncoderClassifier
 
-# --- utils ---
-print("WAVs here:", [p.name for p in Path.cwd().glob("*.wav")])
+# Choose ONE of these:
+# MODEL = "speechbrain/sepformer-wsj02mix"            # clean speech
+MODEL = "speechbrain/sepformer-wham16k-separation"    # noisy/real-world
 
-PROJECT_DIR = Path(__file__).parent.resolve()
-SR_PIPELINE = 16000  # keep the rest of your stack at 16k
+INPUT = "enroll_target.wav"
+OUT_SR = 44100  # for easy playback; keep 16000 if you prefer
 
-def wav_to_tensor(path_like) -> torch.Tensor:
-    """Load audio, resample to 16k mono float32, return shape [1, T]."""
-    p = Path(path_like)
-    if not p.exists():
-        raise FileNotFoundError(f"File not found: {p}")
-    wav, sr = torchaudio.load(str(p))  # [C, T]
-    if wav.shape[0] > 1:
-        wav = torch.mean(wav, dim=0, keepdim=True)
-    if sr != SR_PIPELINE:
-        wav = torchaudio.functional.resample(wav, sr, SR_PIPELINE)
-    return wav.contiguous().float()
+def get_model_sr(separator, default=16000):
+    # Try to read SR from model hparams
+    for k in ("sample_rate", "sr", "fs"):
+        if k in separator.hparams:
+            return int(separator.hparams[k])
+    return default
 
-def cosine(a: np.ndarray, b: np.ndarray) -> float:
-    a = a / (np.linalg.norm(a) + 1e-8)
-    b = b / (np.linalg.norm(b) + 1e-8)
-    return float(np.dot(a, b))
+def to_sources_time(out):
+    # Normalize to [S, T] from either [1,S,T] or [1,T,S]
+    if out.dim() != 3 or out.shape[0] != 1:
+        raise RuntimeError(f"Unexpected output shape: {tuple(out.shape)} (expected [1,*,*])")
+    B, A, C = out.shape
+    # Heuristic: time dimension >> num sources (<=8 typically)
+    if A <= 8 and C > 100:         # [1, S, T]
+        return out[0]              # [S, T]
+    elif C <= 8 and A > 100:       # [1, T, S]
+        return out.transpose(1, 2)[0]  # [S, T]
+    else:
+        # Fallback: choose the variant with longer time axis
+        a = out[0]                 # assume [S,T]
+        b = out.transpose(1,2)[0]  # swapped
+        return a if a.shape[1] >= b.shape[1] else b
 
-# --- enroll target speaker ---
-print("WAVs here:", [p.name for p in Path.cwd().glob("*.wav")])
+def main():
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    separator = Separator.from_hparams(
+        source=MODEL,
+        savedir=f"./pretrained_models/{MODEL.split('/')[-1]}",
+        run_opts={"device": device},
+    )
+    SB_SR = get_model_sr(separator, default=16000)
 
-ENROLL_WAV = PROJECT_DIR / "enroll_target.wav"
-enroll_wav = wav_to_tensor(ENROLL_WAV)
+    wav = Path(INPUT)
+    mix, sr = torchaudio.load(str(wav))   # [C, T]
+    if mix.shape[0] > 1:
+        mix = mix.mean(dim=0, keepdim=True)
+    if sr != SB_SR:
+        mix = torchaudio.functional.resample(mix, sr, SB_SR)
+        sr = SB_SR
 
-MODEL_ID = "speechbrain/sepformer-wsj02mix"   # <= 2-speaker separation @ 8 kHz
-sep = Separator.from_hparams(
-    source=MODEL_ID,
-    savedir=str(PROJECT_DIR / "pretrained" / MODEL_ID.replace("/", "_")),
-    run_opts={"device": "cuda"}  # or "cpu"
-)
+    mono = mix.squeeze(0).to(device)      # [T]
+    with torch.no_grad():
+        out = separator.separate_batch(mono.unsqueeze(0))  # [1,*,*] (layout varies)
 
-with torch.inference_mode():
-    # returns shape typically [n_src, T, 1]
-    est = sep.separate_file(path=str(ENROLL_WAV))
+    est = to_sources_time(out).cpu()      # [S, T]
+    # Keep exactly 2 stems (top-2 energy if >2)
+    if est.shape[0] > 2:
+        energies = (est**2).mean(dim=1)
+        idx = torch.topk(energies, k=2).indices
+        est = est[idx]
+    elif est.shape[0] < 2:
+        import torch as t
+        pad = t.zeros(2 - est.shape[0], est.shape[1])
+        est = t.cat([est, pad], dim=0)
 
-# Save as s1.wav / s2.wav at model sample rate (8 kHz)
-torchaudio.save(str(PROJECT_DIR / "s1.wav"), est[0, :, 0].cpu().unsqueeze(0), 8000)
-torchaudio.save(str(PROJECT_DIR / "s2.wav"), est[1, :, 0].cpu().unsqueeze(0), 8000)
+    # Peak-normalize to -1 dBFS and save as PCM16 @ OUT_SR
+    out_dir = wav.parent / f"{wav.stem}_separated"
+    out_dir.mkdir(exist_ok=True)
+    for i in range(2):
+        s = est[i]
+        peak = float(s.abs().max())
+        if peak > 0:
+            s = s * (10**(-1/20) / peak)
+        if sr != OUT_SR:
+            s = torchaudio.functional.resample(s.unsqueeze(0), sr, OUT_SR).squeeze(0)
+            sr_out = OUT_SR
+        else:
+            sr_out = sr
+        sf.write(str(out_dir / f"{wav.stem}_source_{i+1}.wav"),
+                 (s.clamp(-1,1).numpy() * 32767).astype("int16"),
+                 sr_out, subtype="PCM_16")
+        print(f"✅ Wrote {out_dir / f'{wav.stem}_source_{i+1}.wav'} ({sr_out} Hz, {s.numel()/sr_out:.2f}s)")
 
-# --- your separation outputs ---
-OUT_A = PROJECT_DIR / "stemA.wav"
-OUT_B = PROJECT_DIR / "stemB.wav"
+if __name__ == "__main__":
+    main()
 
-stemA = wav_to_tensor(OUT_A)
-stemB = wav_to_tensor(OUT_B)
-
-with torch.inference_mode():
-    embA = spk_model.encode_batch(stemA).detach().cpu().numpy()[0]
-    embB = spk_model.encode_batch(stemB).detach().cpu().numpy()[0]
-
-scoreA = cosine(enroll_emb, embA)
-scoreB = cosine(enroll_emb, embB)
-
-target_path = OUT_A if scoreA >= scoreB else OUT_B
-print(f"Target selected: {target_path}  (cosA={scoreA:.3f}, cosB={scoreB:.3f})")
-print("WAVs here:", [p.name for p in Path.cwd().glob("*.wav")])
