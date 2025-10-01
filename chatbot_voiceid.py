@@ -92,6 +92,7 @@ Response Rules:
 - When responding, consider the sentence that follows the wake word
 - Keep responses concise (1-2 sentences typically)
 - Speak as if having a natural conversation
+- Start each reply by addressing the user by their verified name when provided. Their name is stored under (best_name) variable.
 - IMPORTANT: Do not use any tools or function calls. Only provide direct text responses.
 - If you're unsure whether the user said "Cora", err on the side of responding rather than staying silent
 - Before answering, double-check that your reply follows all these rules.
@@ -795,7 +796,7 @@ async def process_turn(detector: UtteranceDetector, stt: WhisperSTT, convo: Conv
                     await speaker.speak("Verification was low; we can add more samples later.")
             else:
                 print(f"[Gate] ✅ Allow: {best_name} (sim={best_sim:.3f})")
-                await speaker.speak(f"Sure {best_name}.")
+                #await speaker.speak(f"Sure {best_name}.")
         except Exception as e:
             print(f"[Gate Error] {e}")
             await speaker.speak("Voice check failed. Please try again.")
