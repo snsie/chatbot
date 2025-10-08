@@ -145,6 +145,14 @@ ENROLL_PATH = "enrollments.npz"
 SIM_THRESHOLD = 0.4
 voice_identifier = get_voice_identifier(ENROLL_PATH) if ENABLE_SPEAKER_GATE else None
 
+# Voice Separation
+import asyncio, numpy as np
+from voice_sep import separate
+from voice_id import identify_from_array  # or your class instance method
+SIM_THRESHOLD = 0.65
+USE_SEPARATION = True  # flip on/off easily
+
+
 # Mongo DB for logging
 from pymongo import MongoClient
 from scipy.signal import resample_poly
@@ -153,6 +161,12 @@ import re
 MONGO_URI = "mongodb://admin:Rob123%21@localhost:27017/admin"
 mongo = MongoClient(MONGO_URI)
 people = mongo["voice_db"]["people"]  # single collection for profiles
+
+# --- VAD refinements ---
+import collections
+PRE_ROLL_MS = 150            # keep ~150 ms of audio BEFORE VAD says "start"
+ENERGY_DBFS_FLOOR = -45.0    # discard segments quieter than this (dBFS)
+
 
 # pydantic setup
 from pydantic import BaseModel, Field, ValidationError
@@ -211,78 +225,95 @@ class UtteranceDetector:
         self._is_muted = False
 
     def record_once(self) -> Optional[np.ndarray]:
-        """Blocking capture of a single utterance. Returns float32 waveform or None."""
         if self._is_muted:
             return None
-            
-        q: 'queue.Queue[bytes]' = queue.Queue()
-        started = False
-        voiced_count = 0
-        silence_count = 0
-        collected: List[bytes] = []
-        overflow_counter = 0
+
+        q: "queue.Queue[bytes]" = queue.Queue()
 
         def callback(indata, frames, time_info, status):
-            nonlocal overflow_counter
-            if status.input_overflow:
-                overflow_counter += 1
-            if not self._is_muted:  # Only collect if not muted
+            if not self._is_muted:
                 q.put(bytes(indata))
 
         self._stream = sd.RawInputStream(
             samplerate=SAMPLE_RATE,
             blocksize=FRAME_SAMPLES,
             channels=1,
-            dtype='int16',
+            dtype="int16",
             callback=callback,
         )
 
+        # New: pre-roll buffer (keeps the last PRE_ROLL_MS of frames)
+        pre_roll_frames = max(1, math.ceil(PRE_ROLL_MS / FRAME_MS))
+        pre_roll = collections.deque(maxlen=pre_roll_frames)
+        silence_count = 0
+        started = False
+        voiced_count = 0
+        silence_count = 0
+        collected: List[bytes] = []
+
         with self._stream:
             while True:
-                if self._is_muted:
-                    return None
-                    
                 try:
-                    frame = q.get(timeout=0.1)
+                    frame = q.get(timeout=0.2)
                 except queue.Empty:
                     continue
-                except KeyboardInterrupt:
-                    raise
-                    
-                is_speech = False
+
+                # Always update pre-roll while we're idle
+                pre_roll.append(frame)
+
+                # VAD decision on this 30 ms frame
                 try:
                     is_speech = self.vad.is_speech(frame, SAMPLE_RATE)
                 except Exception:
-                    # If VAD fails (rare), treat as silence
                     is_speech = False
+
                 if not started:
                     if is_speech:
                         voiced_count += 1
-                        collected.append(frame)
                         if voiced_count >= MIN_VOICED_FRAMES:
                             started = True
+                            # New: prepend pre-roll so we don't chop off initial consonants
+                            collected.extend(list(pre_roll))
+                            silence_count = 0
                     else:
-                        # Reset (noise or short blips)
                         voiced_count = 0
-                        collected.clear()
+                        # Don't touch collected here; we only collect after start
                     continue
-                # After started
+
+                # After started: collect every frame
                 collected.append(frame)
+
                 if is_speech:
                     silence_count = 0
                 else:
                     silence_count += 1
                     if silence_count >= TRAILING_SILENCE_FRAMES:
                         break  # end of utterance
+
         if not collected:
             return None
-        # Remove trailing silence frames for cleaner STT input
+
+        # Trim trailing silence frames (optional but helpful for STT/ID)
         if silence_count:
             collected = collected[:-silence_count] or collected
+
+        # Too short? (keeps your original behavior)
         if len(collected) < MIN_VOICED_FRAMES:
-            return None  # Too short / discard
-        pcm = b''.join(collected)
-        audio = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
+            return None
+
+        # New: energy floor check in dBFS; discard very quiet segments
+        pcm = b"".join(collected)
+        x = np.frombuffer(pcm, dtype=np.int16).astype(np.float32)
+        rms = float(np.sqrt(np.mean(x * x)) + 1e-9)
+        dbfs = 20.0 * math.log10(rms / 32768.0 + 1e-12)
+        if dbfs < ENERGY_DBFS_FLOOR:
+            # Too quiet to be useful in a crowd: ignore
+            print(f"[VAD] Discarded (level {dbfs:.1f} dBFS < {ENERGY_DBFS_FLOOR} dBFS)")
+            return None
+
+        # Convert to float32 mono [-1, +1] for downstream
+        audio = x / 32768.0
+        print(f"[VAD] Segment: {len(audio)/SAMPLE_RATE:.2f}s, level {dbfs:.1f} dBFS")
         return audio
 
 # =============================
@@ -675,6 +706,35 @@ class Conversation:
         """Get current style description for debugging."""
         return self.current_style_modifier or "Default conversational style"
 
+SIM_THRESHOLD = 0.65
+USE_SEPARATION = True  # flip on/off easily
+
+async def handle_chunk(audio_np: np.ndarray, sr: int = 16000):
+    # Optional fast gate: if you suspect no overlap, you can skip separation.
+    stems = [audio_np]
+    if USE_SEPARATION:
+        try:
+            stems = separate(audio_np, sr=sr)  # -> (2, T)
+        except Exception as e:
+            print(f"[sepformer] failed, falling back: {e}")
+
+    # Run your existing voice ID on each candidate stem
+    best_name, best_sim, best_audio = None, -1.0, None
+    for i, stem in enumerate(stems):
+        name, sim = identify_from_array(stem, sr)  # your function
+        print(f"[voice-id] stem{i}: name={name} sim={sim:.3f}")
+        if sim > best_sim:
+            best_name, best_sim, best_audio = name, sim, stem
+
+    if best_sim < SIM_THRESHOLD or best_audio is None:
+        # No trusted match → do not respond
+        await speaker.speak("I heard speech, but it didn't match a registered voice.")
+        return
+
+    # Proceed with ASR → LLM → TTS using best_audio only
+    text = await asr.transcribe(best_audio, sr)   # your ASR call
+    reply = await agent.respond(text, speaker=best_name)
+    await tts.speak(reply)
 # =============================
 # Main Loop Logic
 # =============================
