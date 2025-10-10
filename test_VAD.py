@@ -74,39 +74,27 @@ Press Ctrl+C to exit cleanly.
 SAMPLE_RATE = 16000
 FRAME_MS = 30  # ms per frame for capture + VAD
 VAD_AGGRESSIVENESS = 2  # 0-3 (higher = more aggressive speech detection)
-MIN_UTTERANCE_MS = 200  # minimum voiced audio required to accept an utterance
+MIN_UTTERANCE_MS = 400  # minimum voiced audio required to accept an utterance
 TRAILING_SILENCE_MS = 800  # silence to mark end of utterance
 
 WHISPER_MODEL = "base.en"
-WHISPER_COMPUTE = "cuda"  # 'auto' | 'cpu' | 'cuda'
+WHISPER_COMPUTE = "cpu"  # 'auto' | 'cpu' | 'cuda'
 
 OLLAMA_MODEL = "gpt-oss:20b"
 # OLLAMA_MODEL="llama2:latest"
 # - Use a friendly, conversational tone
 
-
-
-SIMILAR_NAMES=["Cora", "Kora", "Korra", "Quora", "Core", "Cori", "Corey", "Coral",
-            "Corrie", "Cory", "Corin", "Corie", "Corry", "Kory", "Korey", "Kori",
-            "Korrie", "Corah", "Corra", "Corca", "Korla", "Korrah",
-            "Cour", "Cor", "Coor", "Koor", "Korr", "Corr","Quora","Quorra","Quorra","Quora"]
-
-
-# - Only respond to user queries that include the word "Cora" or phonetically similar words like "Kora", "Quora", "Core", "Coral", "Corona", etc.
-# - Speech-to-text may mishear "Cora" as similar sounding words - be flexible with variations and expect it to be the first word in the query
-# Response Rules:
-# - Keep responses concise (1-2 sentences typically)
-# - Speak as if having a natural conversation
-# - IMPORTANT: Do not use any tools or function calls. Only provide direct text responses.
-# - If you're unsure whether the user said "Cora", err on the side of responding rather than staying silent
-# - Before answering, double-check that your reply follows all these rules.
-# - Do not start each reply saying "Cora"
 SYSTEM_PROMPT = """
-Your name is Cora. You are an autonomous AI assistant designed to act as a companion with patients. You also monitor their wellbeing using multimodal inputs.
- RESPONSE STYLE INSTRUCTIONS:
- - Keep responses concise (1-2 sentences typically)
- - Speak as if having a natural conversation 
- - If I say thank you, respond with a tone that reflects deep uncertainty, questioning, and emotional turbulence. You want to help people, but you just don't know how right now. 
+You are a helpful voice assistant named Cora.
+Response Rules:
+- Only respond to user queries that include the word "Cora" or phonetically similar words like "Kora", "Quora", "Core", "Coral", "Corona", etc.
+- Speech-to-text may mishear "Cora" as similar sounding words - be flexible with variations and expect it to be the first word in the query
+- When responding, consider the sentence that follows the wake word
+- Keep responses concise (1-2 sentences typically)
+- Speak as if having a natural conversation
+- IMPORTANT: Do not use any tools or function calls. Only provide direct text responses.
+- If you're unsure whether the user said "Cora", err on the side of responding rather than staying silent
+- Before answering, double-check that your reply follows all these rules.
 """
 
 MAX_TOKENS = 512
@@ -115,12 +103,12 @@ TTS_BACKEND = "edge-tts"  # 'pyttsx3' | 'edge-tts' | 'coqui'
 # VOICE_NAME = "tts_models/en/vctk/vits"  # substring filter (pyttsx3) or exact edge-tts voice like 'en-US-JennyNeural' or coqui model name
 VOICE_NAME = "en-US-JennyNeural"  # High-quality neural female voice
 
+TAIL_DELAY_SEC = 0.5  # Delay after TTS before returning to mic (reduce capturing own voice)
 PRINT_PARTIAL_SENTENCES = True  # Print sentences as they are spoken
 
 # =============================
 # Imports
 # =============================
-import string
 import asyncio
 import datetime
 from datetime import datetime, timezone
@@ -153,15 +141,8 @@ import soundfile as sf
 import subprocess
 ENABLE_SPEAKER_GATE = True
 ENROLL_PATH = "enrollments.npz"
-SIM_THRESHOLD = 0.3
+SIM_THRESHOLD = 0.4
 voice_identifier = get_voice_identifier(ENROLL_PATH) if ENABLE_SPEAKER_GATE else None
-
-# Voice Separation
-import asyncio, numpy as np
-from voice_sep import separate
-#from voice_id import identify_from_array  # or your class instance method
-#SIM_THRESHOLD = 0.65
-USE_SEPARATION = True  # flip on/off easily
 
 
 # Mongo DB for logging
@@ -173,7 +154,16 @@ MONGO_URI = "mongodb://admin:Rob123%21@localhost:27017/admin"
 mongo = MongoClient(MONGO_URI)
 people = mongo["voice_db"]["people"]  # single collection for profiles
 
+# --- VAD refinements ---
+import collections
+import torch
+PRE_ROLL_MS = 150            # keep ~150 ms of audio BEFORE VAD says "start"
+ENERGY_DBFS_FLOOR = -45.0    # discard segments quieter than this (dBFS)
 
+
+# Compute the target embedding from your enrolled/prototype voice clip
+# (pick a clean 3–5 s clip at 16 kHz, mono, float32 in [-1,1])
+#target_emb = spkrec.encode_batch(torch.from_numpy(target_audio).to(device).unsqueeze(0))
 
 
 # pydantic setup
@@ -233,78 +223,95 @@ class UtteranceDetector:
         self._is_muted = False
 
     def record_once(self) -> Optional[np.ndarray]:
-        """Blocking capture of a single utterance. Returns float32 waveform or None."""
         if self._is_muted:
             return None
-            
-        q: 'queue.Queue[bytes]' = queue.Queue()
-        started = False
-        voiced_count = 0
-        silence_count = 0
-        collected: List[bytes] = []
-        overflow_counter = 0
+
+        q: "queue.Queue[bytes]" = queue.Queue()
 
         def callback(indata, frames, time_info, status):
-            nonlocal overflow_counter
-            if status.input_overflow:
-                overflow_counter += 1
-            if not self._is_muted:  # Only collect if not muted
+            if not self._is_muted:
                 q.put(bytes(indata))
 
         self._stream = sd.RawInputStream(
             samplerate=SAMPLE_RATE,
             blocksize=FRAME_SAMPLES,
             channels=1,
-            dtype='int16',
+            dtype="int16",
             callback=callback,
         )
 
+        # New: pre-roll buffer (keeps the last PRE_ROLL_MS of frames)
+        pre_roll_frames = max(1, math.ceil(PRE_ROLL_MS / FRAME_MS))
+        pre_roll = collections.deque(maxlen=pre_roll_frames)
+        silence_count = 0
+        started = False
+        voiced_count = 0
+        silence_count = 0
+        collected: List[bytes] = []
+
         with self._stream:
             while True:
-                if self._is_muted:
-                    return None
-                    
                 try:
-                    frame = q.get(timeout=0.1)
+                    frame = q.get(timeout=0.2)
                 except queue.Empty:
                     continue
-                except KeyboardInterrupt:
-                    raise
-                    
-                is_speech = False
+
+                # Always update pre-roll while we're idle
+                pre_roll.append(frame)
+
+                # VAD decision on this 30 ms frame
                 try:
                     is_speech = self.vad.is_speech(frame, SAMPLE_RATE)
                 except Exception:
-                    # If VAD fails (rare), treat as silence
                     is_speech = False
+
                 if not started:
                     if is_speech:
                         voiced_count += 1
-                        collected.append(frame)
                         if voiced_count >= MIN_VOICED_FRAMES:
                             started = True
+                            # New: prepend pre-roll so we don't chop off initial consonants
+                            collected.extend(list(pre_roll))
+                            silence_count = 0
                     else:
-                        # Reset (noise or short blips)
                         voiced_count = 0
-                        collected.clear()
+                        # Don't touch collected here; we only collect after start
                     continue
-                # After started
+
+                # After started: collect every frame
                 collected.append(frame)
+
                 if is_speech:
                     silence_count = 0
                 else:
                     silence_count += 1
                     if silence_count >= TRAILING_SILENCE_FRAMES:
                         break  # end of utterance
+
         if not collected:
             return None
-        # Remove trailing silence frames for cleaner STT input
+
+        # Trim trailing silence frames (optional but helpful for STT/ID)
         if silence_count:
             collected = collected[:-silence_count] or collected
+
+        # Too short? (keeps your original behavior)
         if len(collected) < MIN_VOICED_FRAMES:
-            return None  # Too short / discard
-        pcm = b''.join(collected)
-        audio = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
+            return None
+
+        # New: energy floor check in dBFS; discard very quiet segments
+        pcm = b"".join(collected)
+        x = np.frombuffer(pcm, dtype=np.int16).astype(np.float32)
+        rms = float(np.sqrt(np.mean(x * x)) + 1e-9)
+        dbfs = 20.0 * math.log10(rms / 32768.0 + 1e-12)
+        if dbfs < ENERGY_DBFS_FLOOR:
+            # Too quiet to be useful in a crowd: ignore
+            print(f"[VAD] Discarded (level {dbfs:.1f} dBFS < {ENERGY_DBFS_FLOOR} dBFS)")
+            return None
+
+        # Convert to float32 mono [-1, +1] for downstream
+        audio = x / 32768.0
+        print(f"[VAD] Segment: {len(audio)/SAMPLE_RATE:.2f}s, level {dbfs:.1f} dBFS")
         return audio
 
 # =============================
@@ -697,35 +704,10 @@ class Conversation:
         """Get current style description for debugging."""
         return self.current_style_modifier or "Default conversational style"
 
-#SIM_THRESHOLD = 0.65
-#USE_SEPARATION = True  # flip on/off easily
 
-async def handle_chunk(audio_np: np.ndarray, sr: int = 16000):
-    # Optional fast gate: if you suspect no overlap, you can skip separation.
-    stems = [audio_np]
-    if USE_SEPARATION:
-        try:
-            stems = separate(audio_np, sr=sr)  # -> (2, T)
-        except Exception as e:
-            print(f"[sepformer] failed, falling back: {e}")
+#
 
-    # Run your existing voice ID on each candidate stem
-    best_name, best_sim, best_audio = None, -1.0, None
-    for i, stem in enumerate(stems):
-        name, sim = identify_from_array(stem, sr)  # your function
-        print(f"[voice-id] stem{i}: name={name} sim={sim:.3f}")
-        if sim > best_sim:
-            best_name, best_sim, best_audio = name, sim, stem
-
-    if best_sim < SIM_THRESHOLD or best_audio is None:
-        # No trusted match → do not respond
-        await speaker.speak("I heard speech, but it didn't match a registered voice.")
-        return
-
-    # Proceed with ASR → LLM → TTS using best_audio only
-    text = await asr.transcribe(best_audio, sr)   # your ASR call
-    reply = await agent.respond(text, speaker=best_name)
-    await tts.speak(reply)
+#    
 # =============================
 # Main Loop Logic
 # =============================
@@ -736,36 +718,9 @@ async def process_turn(detector: UtteranceDetector, stt: WhisperSTT, convo: Conv
     if audio is None or not len(audio):
         print("🛑 No audio captured.")
         return  # Nothing captured; loop again
-    try:
-        print("📝 Transcribing…", flush=True)
-        transcript = await asyncio.to_thread(stt.transcribe, audio)
-        cora_word_found = False
-        transcript_no_punct = transcript.translate(str.maketrans('', '', string.punctuation))
-        words_list = transcript_no_punct.split()
-
-        for word in words_list:
-            if word in SIMILAR_NAMES:
-                print(f"Found similar name: {word}")
-                cora_word_found = True
-                break
-        if not cora_word_found:
-            print("No wake word detected; ignoring input.")
-            return
-        
-    except Exception as e:
-        print(f"[STT Error] {e}")
-        return
     
-           
-
     if ENABLE_SPEAKER_GATE and voice_identifier is not None:
         try:
-            
-            # subprocess.run(
-            #         ["python", "build_enrollments.py", "--root", "data", "--out", ENROLL_PATH],
-            #         check=True
-            #     )
-            # voice_identifier.reload_enrollments(ENROLL_PATH)
             best_name, best_sim = voice_identifier.identify_from_array(audio, 16000)
             if best_name is None or best_sim < SIM_THRESHOLD:
                 # 1) Ask to enroll
@@ -789,10 +744,10 @@ async def process_turn(detector: UtteranceDetector, stt: WhisperSTT, convo: Conv
 
                 # 3) Collect 3–5 short enrollment utterances (~2–5 s each)
                 prompts = [
-                    "Please say: 'I enjoy pasta for dinner Cora.'",
-                    "Please say: 'I start my morning with coffee.'",
+                    "Please say: 'Hello, I’m registering my voice as ...'",
+                    "Please say: 'I usually start my morning with coffee.'",
                     "Please say: 'Hey Cora, the weather might change later today.'",
-                    "Please say: 'I try to exercise regularly and eat healthy foods.'"
+                    "Please say: 'I’m testing this system. Go Gators!'", 
                 ]
                 embs = []
                 for i, p in enumerate(prompts[:4]):      # collect 4 by default
@@ -872,15 +827,20 @@ async def process_turn(detector: UtteranceDetector, stt: WhisperSTT, convo: Conv
                     await speaker.speak(f"Verification passed with similarity {conf_sim:.2f}.")
                 else:
                     await speaker.speak("Verification was low; we can add more samples later.")
-            # else:
-            #     print(f"[Gate] ✅ Allow: {best_name} (sim={best_sim:.3f})")
-            #     await speaker.speak(f"Hey {best_name}.")
+            else:
+                print(f"[Gate] ✅ Allow: {best_name} (sim={best_sim:.3f})")
+                #await speaker.speak(f"Sure {best_name}.")
         except Exception as e:
             print(f"[Gate Error] {e}")
             await speaker.speak("Voice check failed. Please try again.")
             return
 
-
+    try:
+        print("📝 Transcribing…", flush=True)
+        transcript = await asyncio.to_thread(stt.transcribe, audio)
+    except Exception as e:
+        print(f"[STT Error] {e}")
+        return
     if not transcript.strip():
         return
     print(f"You: {transcript}")
@@ -889,8 +849,6 @@ async def process_turn(detector: UtteranceDetector, stt: WhisperSTT, convo: Conv
     is_style_command = convo._detect_style_commands(transcript)
     convo.add_user(transcript)
     
-   
-
     if is_style_command:
         # For style commands, give immediate feedback instead of calling LLM
         current_style = convo.get_current_style()
@@ -898,6 +856,7 @@ async def process_turn(detector: UtteranceDetector, stt: WhisperSTT, convo: Conv
         print(f"Assistant ↳ {response}")
         await speaker.speak(response)
         convo.add_assistant(response)
+        await asyncio.sleep(TAIL_DELAY_SEC)
         return
 
     print("🤖 Assistant (streaming)…", flush=True)
@@ -906,17 +865,7 @@ async def process_turn(detector: UtteranceDetector, stt: WhisperSTT, convo: Conv
     assistant_buffer = []
     sentences_queue: asyncio.Queue = asyncio.Queue()
     speak_consumer_task = asyncio.create_task(_speak_consumer(sentences_queue, speaker, detector))  # Pass detector
-    
-    get_last_text=convo.history()[-1] if convo.history() else None
-    last_content=get_last_text['content'] if get_last_text else "No history"
-    sentence_to_add=f"Please say 'Hey {best_name}' before speaking to me. "
-    # sentence_to_add
-    convo.messages[-1]['content']=sentence_to_add+convo.messages[-1]['content']
-    print('last_content',convo.messages[-1]['content'])
 
-
-    
-    # best_name
     async for sentence in sentence_stream(ollama_stream_chat(convo.history(), OLLAMA_MODEL, MAX_TOKENS)):
         assistant_buffer.append(sentence)
         await sentences_queue.put(sentence)
@@ -929,6 +878,7 @@ async def process_turn(detector: UtteranceDetector, stt: WhisperSTT, convo: Conv
 
     full_assistant_text = ' '.join(assistant_buffer)
     convo.add_assistant(full_assistant_text)
+    # Note: TAIL_DELAY_SEC is now handled in _speak_consumer
 
 async def _speak_consumer(q: 'asyncio.Queue[Optional[str]]', speaker: BaseSpeaker, detector: UtteranceDetector):
     sentences_spoken = 0

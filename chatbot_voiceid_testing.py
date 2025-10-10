@@ -92,7 +92,6 @@ Response Rules:
 - When responding, consider the sentence that follows the wake word
 - Keep responses concise (1-2 sentences typically)
 - Speak as if having a natural conversation
-- Start each reply by addressing the user by their verified name when provided. Their name is stored under (best_name) variable.
 - IMPORTANT: Do not use any tools or function calls. Only provide direct text responses.
 - If you're unsure whether the user said "Cora", err on the side of responding rather than staying silent
 - Before answering, double-check that your reply follows all these rules.
@@ -148,7 +147,7 @@ voice_identifier = get_voice_identifier(ENROLL_PATH) if ENABLE_SPEAKER_GATE else
 # Voice Separation
 import asyncio, numpy as np
 from voice_sep import separate
-from voice_id import identify_from_array  # or your class instance method
+#from voice_id import identify_from_array  # or your class instance method
 SIM_THRESHOLD = 0.65
 USE_SEPARATION = True  # flip on/off easily
 
@@ -164,6 +163,7 @@ people = mongo["voice_db"]["people"]  # single collection for profiles
 
 # --- VAD refinements ---
 import collections
+import torch
 PRE_ROLL_MS = 150            # keep ~150 ms of audio BEFORE VAD says "start"
 ENERGY_DBFS_FLOOR = -45.0    # discard segments quieter than this (dBFS)
 
@@ -180,7 +180,7 @@ spkrec     = EncoderClassifier.from_hparams(source="speechbrain/spkrec-ecapa-vox
 
 # Compute the target embedding from your enrolled/prototype voice clip
 # (pick a clean 3–5 s clip at 16 kHz, mono, float32 in [-1,1])
-target_emb = spkrec.encode_batch(torch.from_numpy(target_audio).to(device).unsqueeze(0))
+#target_emb = spkrec.encode_batch(torch.from_numpy(target_audio).to(device).unsqueeze(0))
 
 
 # pydantic setup
