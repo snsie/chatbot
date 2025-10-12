@@ -101,3 +101,108 @@ def record_once(self) -> Optional[np.ndarray]:
         pcm = b''.join(collected)
         audio = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
         return audio
+
+
+
+VAD adjustments
+# --- VAD refinements ---
+import collections
+PRE_ROLL_MS = 150            # keep ~150 ms of audio BEFORE VAD says "start"
+ENERGY_DBFS_FLOOR = -45.0    # discard segments quieter than this (dBFS)
+
+
+ def record_once(self) -> Optional[np.ndarray]:
+        if self._is_muted:
+            return None
+
+        q: "queue.Queue[bytes]" = queue.Queue()
+
+        def callback(indata, frames, time_info, status):
+            if not self._is_muted:
+                q.put(bytes(indata))
+
+        self._stream = sd.RawInputStream(
+            samplerate=SAMPLE_RATE,
+            blocksize=FRAME_SAMPLES,
+            channels=1,
+            dtype="int16",
+            callback=callback,
+        )
+
+        # New: pre-roll buffer (keeps the last PRE_ROLL_MS of frames)
+        pre_roll_frames = max(1, math.ceil(PRE_ROLL_MS / FRAME_MS))
+        pre_roll = collections.deque(maxlen=pre_roll_frames)
+        silence_count = 0
+        started = False
+        voiced_count = 0
+        silence_count = 0
+        collected: List[bytes] = []
+
+        with self._stream:
+            while True:
+                try:
+                    frame = q.get(timeout=0.2)
+                except queue.Empty:
+                    continue
+
+                # Always update pre-roll while we're idle
+                pre_roll.append(frame)
+
+                # VAD decision on this 30 ms frame
+                try:
+                    is_speech = self.vad.is_speech(frame, SAMPLE_RATE)
+                except Exception:
+                    is_speech = False
+
+                if not started:
+                    if is_speech:
+                        voiced_count += 1
+                        if voiced_count >= MIN_VOICED_FRAMES:
+                            started = True
+                            # New: prepend pre-roll so we don't chop off initial consonants
+                            collected.extend(list(pre_roll))
+                            silence_count = 0
+                    else:
+                        voiced_count = 0
+                        # Don't touch collected here; we only collect after start
+                    continue
+
+                # After started: collect every frame
+                collected.append(frame)
+
+                if is_speech:
+                    silence_count = 0
+                else:
+                    silence_count += 1
+                    if silence_count >= TRAILING_SILENCE_FRAMES:
+                        break  # end of utterance
+
+        if not collected:
+            return None
+
+        # Trim trailing silence frames (optional but helpful for STT/ID)
+        if silence_count:
+            collected = collected[:-silence_count] or collected
+
+        # Too short? (keeps your original behavior)
+        if len(collected) < MIN_VOICED_FRAMES:
+            return None
+
+        # New: energy floor check in dBFS; discard very quiet segments
+        pcm = b"".join(collected)
+        x = np.frombuffer(pcm, dtype=np.int16).astype(np.float32)
+        rms = float(np.sqrt(np.mean(x * x)) + 1e-9)
+        dbfs = 20.0 * math.log10(rms / 32768.0 + 1e-12)
+        if dbfs < ENERGY_DBFS_FLOOR:
+            # Too quiet to be useful in a crowd: ignore
+            print(f"[VAD] Discarded (level {dbfs:.1f} dBFS < {ENERGY_DBFS_FLOOR} dBFS)")
+            return None
+
+        # Convert to float32 mono [-1, +1] for downstream
+        audio = x / 32768.0
+        print(f"[VAD] Segment: {len(audio)/SAMPLE_RATE:.2f}s, level {dbfs:.1f} dBFS")
+        return audio
+
+
+
+Start each reply by addressing the user by their verified name when provided. Their name is stored under (best_name) variable.
