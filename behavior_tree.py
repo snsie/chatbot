@@ -25,166 +25,160 @@ from py_trees.composites import Sequence, Selector # used to create a sequence o
 from py_trees.decorators import EternalGuard
 from py_trees import logging as log_tree # used for terminal prints (visualization of ticks)
 
-
-async def process_turn(detector: cb.UtteranceDetector, stt: cb.WhisperSTT, convo: cb.Conversation, speaker: cb.BaseSpeaker):
+async def active_listening(detector:UtteranceDetector, stt: WhisperSTT):
     print("🎤 Listening…", flush=True)
 
     audio = await asyncio.to_thread(detector.record_once)  # Add back the asyncio.to_thread()
     if audio is None or not len(audio):
         print("🛑 No audio captured.")
-        return  # Nothing captured; loop again
-    
-    if cb.ENABLE_SPEAKER_GATE and cb.voice_identifier is not None:
-        try:
-            best_name, best_sim = cb.voice_identifier.identify_from_array(audio, 16000)
-            if best_name is None or best_sim < cb.SIM_THRESHOLD:
-                # 1) Ask to enroll
-                await speaker.speak("I didn’t recognize your voice. Would you like to register it now?")
-                
-                resp_audio = await asyncio.to_thread(detector.record_once)
-                resp_text  = (await asyncio.to_thread(stt.transcribe, resp_audio)).strip().lower() if resp_audio is not None else ""
-                if not any(k in resp_text for k in ["yes", "yeah", "yep", "sure", "ok", "okay"]):
-                    await speaker.speak("Okay, I won't enroll right now.")
-                    return
-                
-                # 2) Ask for a display name
-                await speaker.speak("What name should I save this voice under?")
-                name_audio = await asyncio.to_thread(detector.record_once)
-                user_name  = await asyncio.to_thread(stt.transcribe, name_audio)
-                user_name  = user_name.strip()
-                user_name = re.sub(r"[^\w\s-]", "", user_name) # remove special chars
-                user_name = re.sub(r"\s+", " ", user_name)
-                user_dir = Path("data") / user_name
-                user_dir.mkdir(parents=True, exist_ok=True)
-
-                # 3) Collect 3–5 short enrollment utterances (~2–5 s each)
-                prompts = [
-                    "Please say: 'Hello, I’m registering my voice as ...'",
-                    "Please say: 'I usually start my morning with coffee.'",
-                    "Please say: 'Hey Cora, the weather might change later today.'",
-                    "Please say: 'I’m testing this system. Go Gators!'", 
-                ]
-                embs = []
-                for i, p in enumerate(prompts[:4]):      # collect 4 by default
-                    await speaker.speak(p)
-                    clip = await asyncio.to_thread(detector.record_once)
-                    if clip is None or len(clip) == 0:
-                        continue
-
-                    # Save raw WAV file under data/<user_name>/<user_name>_i.wav
-                    out_path = user_dir / f"{user_name}_{i}.wav"
-                    sf.write(str(out_path), clip, 16000)
-                    print(f"[Enroll] Saved {out_path}")
-                    
-
-                # 4) re runs build_enrollments.py to update enrollments.npz and reload into voice_id memory
-                cb.subprocess.run(
-                    ["python", "build_enrollments.py", "--root", "data", "--out", cb.ENROLL_PATH],
-                    check=True
-                )
-                cb.voice_identifier.reload_enrollments(cb.ENROLL_PATH)
-
-                # 5) Read the centroid for this user from enrollments.npz and upsert ONE Mongo doc
-                npz = cb.np.load(cb.ENROLL_PATH, allow_pickle=True)  # has arrays: names, vecs :contentReference[oaicite:3]{index=3}
-                names, vecs = npz["names"], npz["vecs"]
-                centroid = None
-                for n, v in zip(names, vecs):
-                    if str(n) == user_name:
-                        centroid = v
-                        break
-                if centroid is None:
-                    await speaker.speak("I couldn’t finalize your enrollment. Please try again later.")
-                    return
-                
-                try:
-                    print("insidee try")
-                    person_data = {
-                        "name": user_name,
-                        "current_embedding": {
-                            "vec": centroid.tolist(),
-                            "model": "speechbrain/ecapa-voxceleb"
-                        },
-                        "file_path": str(user_dir.resolve()),
-                        # created_at is auto-set by Pydantic at object creation
-                    }
-                    
-                    # Validate with Pydantic --> creating Person object that checks against types of person_data
-                    person = cb.Person(**person_data)
-                    
-                    # insert into mongodb if successful validation of data types
-                    cb.people.update_one(
-                        {"name": user_name},
-                        {"$set": {
-                            "current_embedding": {
-                                "vec": person.current_embedding.vec,
-                                "model": person.current_embedding.model
-                            },
-                            "file_path": person.file_path,
-                            "created_at": person.created_at,
-                        }},
-                        upsert=True
-                    )
-                    print("success")
-                    
-                except ValidationError as e:
-                    await speaker.speak("Error saving your voice profile. Please try again.")
-                    print(f"Pydantic validation error: {e}")
-                    return
-                
-                
-                await speaker.speak(f"Thanks {user_name}. Your voice has been registered.")
-
-                # 5) Optional immediate re-check
-                await speaker.speak("Say one more sentence to confirm.")
-                confirm = await asyncio.to_thread(detector.record_once)
-                conf_name, conf_sim = cb.voice_identifier.identify_from_array(confirm, 16000)
-                if conf_name == user_name:
-                    await speaker.speak(f"Verification passed with similarity {conf_sim:.2f}.")
-                else:
-                    await speaker.speak("Verification was low; we can add more samples later.")
-            else:
-                print(f"[Gate] ✅ Allow: {best_name} (sim={best_sim:.3f})")
-                #await speaker.speak(f"Sure {best_name}.")
-        except Exception as e:
-            print(f"[Gate Error] {e}")
-            await speaker.speak("Voice check failed. Please try again.")
-            return
-
+        return False # Nothing captured; loop again
     try:
         print("📝 Transcribing…", flush=True)
+        transcript = await asyncio.to_thread(stt.transcribe, audio)
+        cora_word_found = False
+        transcript_no_punct = transcript.translate(str.maketrans('', '', string.punctuation))
+        words_list = transcript_no_punct.split()
 
+        # listening for "cora"
+        for word in words_list:
+            if word in SIMILAR_NAMES:
+                print(f"Found similar name: {word}")
+                cora_word_found = True
+                return True
+        if not cora_word_found:
+            print("No wake word detected; ignoring input.")
+            return False
+        
     except Exception as e:
         print(f"[STT Error] {e}")
-        return
-    if not cb.transcript.strip():
-        return
-    print(f"You: {cb.transcript}")
+        return False
 
-    # Handle style commands differently
-    is_style_command = convo._detect_style_commands(cb.transcript)
-    convo.add_user(cb.transcript)
+async def voice_registration(detector: UtteranceDetector, stt: WhisperSTT, convo: Conversation, speaker: BaseSpeaker):
+    # 1) Ask to enroll
+    await speaker.speak("I didn’t recognize your voice. Would you like to register it now?")
+    
+    resp_audio = await asyncio.to_thread(detector.record_once)
+    resp_text  = (await asyncio.to_thread(stt.transcribe, resp_audio)).strip().lower() if resp_audio is not None else ""
+    if not any(k in resp_text for k in ["yes", "yeah", "yep", "sure", "ok", "okay"]):
+        await speaker.speak("Okay, I won't enroll right now.")
+        return False
+    
+    # 2) Ask for a display name
+    await speaker.speak("What name should I save this voice under?")
+    name_audio = await asyncio.to_thread(detector.record_once)
+    user_name  = await asyncio.to_thread(stt.transcribe, name_audio)
+    user_name  = user_name.strip()
+    user_name = re.sub(r"[^\w\s-]", "", user_name) # remove special chars
+    user_name = re.sub(r"\s+", " ", user_name)
+    user_dir = Path("data") / user_name
+    user_dir.mkdir(parents=True, exist_ok=True)
 
-    if is_style_command:
-        # For style commands, give immediate feedback instead of calling LLM
-        current_style = convo.get_current_style()
-        response = f"I've updated my response style. Current style: {current_style}"
-        print(f"Assistant ↳ {response}")
-        await speaker.speak(response)
-        convo.add_assistant(response)
-        await asyncio.sleep(cb.TAIL_DELAY_SEC)
-        return
+    # 3) Collect 3–5 short enrollment utterances (~2–5 s each)
+    prompts = [
+        "Please say: 'I enjoy pasta for dinner Cora.'",
+        "Please say: 'I start my morning with coffee.'",
+        "Please say: 'Hey Cora, the weather might change later today.'",
+        "Please say: 'I try to exercise regularly and eat healthy foods.'"
+    ]
+    embs = []
+    for i, p in enumerate(prompts[:4]):      # collect 4 by default
+        await speaker.speak(p)
+        clip = await asyncio.to_thread(detector.record_once)
+        if clip is None or len(clip) == 0:
+            continue
 
+        # Save raw WAV file under data/<user_name>/<user_name>_i.wav
+        out_path = user_dir / f"{user_name}_{i}.wav"
+        sf.write(str(out_path), clip, 16000)
+        print(f"[Enroll] Saved {out_path}")
+        
+
+    # 4) re runs build_enrollments.py to update enrollments.npz and reload into voice_id memory
+    subprocess.run(
+        ["python", "build_enrollments.py", "--root", "data", "--out", ENROLL_PATH],
+        check=True
+    )
+    voice_identifier.reload_enrollments(ENROLL_PATH)
+
+    # 5) Read the centroid for this user from enrollments.npz and upsert ONE Mongo doc
+    npz = np.load(ENROLL_PATH, allow_pickle=True)  # has arrays: names, vecs :contentReference[oaicite:3]{index=3}
+    names, vecs = npz["names"], npz["vecs"]
+    centroid = None
+    for n, v in zip(names, vecs):
+        if str(n) == user_name:
+            centroid = v
+            break
+    if centroid is None:
+        await speaker.speak("I couldn’t finalize your enrollment. Please try again later.")
+        return False
+    
+    try:
+        person_data = {
+            "name": user_name,
+            "current_embedding": {
+                "vec": centroid.tolist(),
+                "model": "speechbrain/ecapa-voxceleb"
+            },
+            "file_path": str(user_dir),
+            # created_at is auto-set by Pydantic at object creation
+        }
+        
+        # Validate with Pydantic --> creating Person object that checks against types of person_data
+        person = Person(**person_data)
+        
+        # insert into mongodb if successful validation of data types
+        people.update_one(
+            {"name": user_name},
+            {"$set": {
+                "current_embedding": {
+                    "vec": person.current_embedding.vec,
+                    "model": person.current_embedding.model
+                },
+                "file_path": person.file_path,
+                "created_at": person.created_at,
+            }},
+            upsert=True
+        )
+        
+    except ValidationError as e:
+        await speaker.speak("Error saving your voice profile. Please try again.")
+        print(f"Pydantic validation error: {e}")
+        return False
+    
+    
+    await speaker.speak(f"Thanks {user_name}. Your voice has been registered.")
+
+    # 5) Optional immediate re-check
+    await speaker.speak("Say one more sentence to confirm.")
+    confirm = await asyncio.to_thread(detector.record_once)
+    conf_name, conf_sim = voice_identifier.identify_from_array(confirm, 16000)
+    if conf_name == user_name:
+        await speaker.speak(f"Verification passed with similarity {conf_sim:.2f}.")
+        return True
+    else:
+        await speaker.speak("Verification was low; we can add more samples later.")
+        return False
+
+async def cora_response(detector: UtteranceDetector, stt: WhisperSTT, convo: Conversation, speaker: BaseSpeaker, best_name):
     print("🤖 Assistant (streaming)…", flush=True)
 
     # Streaming generation
     assistant_buffer = []
     sentences_queue: asyncio.Queue = asyncio.Queue()
     speak_consumer_task = asyncio.create_task(_speak_consumer(sentences_queue, speaker, detector))  # Pass detector
-
-    async for sentence in cb.sentence_stream(cb.ollama_stream_chat(convo.history(), cb.OLLAMA_MODEL, cb.MAX_TOKENS)):
+    
+    get_last_text=convo.history()[-1] if convo.history() else None
+    last_content=get_last_text['content'] if get_last_text else "No history"
+    sentence_to_add=f"Please say 'Hey {best_name}' before speaking to me. "
+    # sentence_to_add
+    convo.messages[-1]['content']=sentence_to_add+convo.messages[-1]['content']
+    print('last_content',convo.messages[-1]['content'])
+    
+    # best_name
+    async for sentence in sentence_stream(ollama_stream_chat(convo.history(), OLLAMA_MODEL, MAX_TOKENS)):
         assistant_buffer.append(sentence)
         await sentences_queue.put(sentence)
-        if cb.PRINT_PARTIAL_SENTENCES:
+        if PRINT_PARTIAL_SENTENCES:
             print(f"Assistant ↳ {sentence}")
 
     # Signal completion
@@ -193,9 +187,8 @@ async def process_turn(detector: cb.UtteranceDetector, stt: cb.WhisperSTT, convo
 
     full_assistant_text = ' '.join(assistant_buffer)
     convo.add_assistant(full_assistant_text)
-    # Note: TAIL_DELAY_SEC is now handled in _speak_consumer
 
-async def _speak_consumer(q: 'asyncio.Queue[Optional[str]]', speaker: cb.BaseSpeaker, detector: cb.UtteranceDetector):
+async def _speak_consumer(q: 'asyncio.Queue[Optional[str]]', speaker: BaseSpeaker, detector: UtteranceDetector):
     sentences_spoken = 0
     
     # Mute microphone when starting to speak
@@ -219,21 +212,61 @@ async def _speak_consumer(q: 'asyncio.Queue[Optional[str]]', speaker: cb.BaseSpe
     detector.unmute_microphone()
     print("🔊 Microphone reactivated")
 
+
+async def process_turn(detector: UtteranceDetector, stt: WhisperSTT, convo: Conversation, speaker: BaseSpeaker):
+    ##### 1. active listening ######
+    cora_detected_audio = active_listening(detector, stt)
+    if(not cora_detected_audio):
+        return
+
+    ######### 2. voice recognition #########
+    if ENABLE_SPEAKER_GATE and voice_identifier is not None:
+        try:
+            best_name, best_sim = voice_identifier.identify_from_array(audio, 16000)
+            if best_name is None or best_sim < SIM_THRESHOLD:
+                was_voice_registered = voice_registration(detector, stt, convo, speaker)
+                if(not was_voice_registered):
+                    return
+        except Exception as e:
+            print(f"[Gate Error] {e}")
+            await speaker.speak("Voice check failed. Please try again.")
+            return
+
+    if not transcript.strip():
+        return
+    print(f"You: {transcript}")
+    
+    # Handle style commands differently
+    is_style_command = convo._detect_style_commands(transcript)
+    convo.add_user(transcript)
+    
+    if is_style_command:
+        # For style commands, give immediate feedback instead of calling LLM
+        current_style = convo.get_current_style()
+        response = f"I've updated my response style. Current style: {current_style}"
+        print(f"Assistant ↳ {response}")
+        await speaker.speak(response)
+        convo.add_assistant(response)
+        return
+
+    ############ 5. cora response #############
+    cora_response(detector, stt, convo, speaker, best_name)
+
 # =============================
 # Entry Point
 # =============================
 async def main():
-    if cb.sys.platform.startswith('win'):
+    if sys.platform.startswith('win'):
         try:
             asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())  # type: ignore
         except Exception:
             pass
     print("Booting streaming voice chatbot…")
 
-    detector = cb.UtteranceDetector()
-    stt = cb.WhisperSTT(cb.WHISPER_MODEL, cb.WHISPER_COMPUTE)
-    speaker = await cb.create_speaker()
-    convo = cb.Conversation(cb.SYSTEM_PROMPT)
+    detector = UtteranceDetector()
+    stt = WhisperSTT(WHISPER_MODEL, WHISPER_COMPUTE)
+    speaker = await create_speaker()
+    convo = Conversation(SYSTEM_PROMPT)
 
     try:
         while True:
@@ -248,6 +281,7 @@ if __name__ == '__main__':
         asyncio.run(main())
     except KeyboardInterrupt:
         pass
+
 
 
 ####### pytrees classes ########
@@ -304,13 +338,34 @@ class AudioDetectedCondition(Behaviour):
 
     def update(self):
         self.logger.debug(f"Condition::update {self.name}")
-        if getattr(self.blackboard, "audio_detected", False): # if audio is detected
+        if getattr(self.blackboard, "audio_detected", False): # params (object, attribute, default)
             self.blackboard.audio_detected = False # reset audio detected
             return Status.SUCCESS
         return Status.FAILURE
     
     def terminate(self, new_status):
         self.logger.debug(f"Condition::terminate {self.name} to {new_status}")
+
+async def audio_detector_logic(detector):
+    blackboard = py_trees.blackboard.Blackboard()
+    print("🎤 Listening…", flush=True)
+
+    audio = await asyncio.to_thread(detector.record_once)  # Add back the asyncio.to_thread()
+    if audio is not None and len(audio):
+        print("Audio captured!")
+        blackboard.audio_detected = True # audio successfully captured    
+
+    # blackboard = py_trees.blackboard.Blackboard()
+    # print("🎤 Listening…", flush=True)
+    # blackboard.audio_detected = False
+    # blackboard.audio_token = 0
+    # while True:
+    #     audio = await asyncio.to_thread(detector.record_once)  # Add back the asyncio.to_thread()
+    #     if audio is not None and len(audio):
+    #         blackboard.latest_audio = audio
+    #         blackboard.audio_detected = True
+    #         blackboard.audio_token = (blackboard.audio_token or 0) + 1
+    #     await asyncio.sleep(0)
 
 class KnownVoiceCondition(Behaviour):
     def __init__(self, name):
@@ -321,7 +376,6 @@ class KnownVoiceCondition(Behaviour):
         self.sim_threshold_key = "SIM_THRESHOLD"
         self.last_seen_token = None
 
-
     def setup(self):
         self.logger.debug(f"Condition::setup {self.name}")
 
@@ -329,6 +383,11 @@ class KnownVoiceCondition(Behaviour):
         self.logger.debug(f"Condition::initialise {self.name}")
 
     def update(self):
+        if getattr(self.blackboard, "unknown_voice", False): # if it is an unknown_voice --> return status.FAILURE to register voice
+            self.blackboard.unknown_voice = False
+            return Status.FAILURE
+        return Status.SUCCESS
+    
         self.logger.debug(f"Condition::update {self.name}")
         token = getattr(self.blackboard, "audio_token", None)
         audio = getattr(self.blackboard, "latest_audio", None)
@@ -341,29 +400,24 @@ class KnownVoiceCondition(Behaviour):
             return Status.SUCCESS if ok else Status.FAILURE
         
         self.last_seen_token = token
-
-        
     
     def terminate(self, new_status):
         self.logger.debug(f"Condition::terminate {self.name} to {new_status}")
 
-
-async def audio_detector_logic(detector):
+async def known_voice_logic(audio, speaker: cb.BaseSpeaker):
     blackboard = py_trees.blackboard.Blackboard()
-    print("🎤 Listening…", flush=True)
-
-    blackboard.audio_detected = False
-    blackboard.audio_token = 0
-    while True:
-        audio = await asyncio.to_thread(detector.record_once)  # Add back the asyncio.to_thread()
-        if audio is not None and len(audio):
-            blackboard.latest_audio = audio
-            blackboard.audio_detected = True
-            blackboard.audio_token = (blackboard.audio_token or 0) + 1
-        await asyncio.sleep(0)
+    if cb.ENABLE_SPEAKER_GATE and cb.voice_identifier is not None:
+        try:
+            best_name, best_sim = cb.voice_identifier.identify_from_array(audio, 16000)
+            if best_name is None or best_sim < cb.SIM_THRESHOLD: # if voice isn't known
+                blackboard.unknown_voice = True
+        except Exception as e:
+                print(f"[Gate Error] {e}")
+                await speaker.speak("Voice check failed. Please try again.")
+                return
 
 def make_bt():
-    root_1 = Sequence(name="Selector", memory=False) # figure out which memory to use
+    root_1 = Sequence(name="sequence", memory=False) # figure out which memory to use
 
     audio_detected_2 = AudioDetectedCondition("Audio Detected?")
     process_audio_3 = Sequence("Processing Audio", memory=False)
@@ -379,45 +433,6 @@ def make_bt():
     register_voice_7 = RegisterVoiceAction("Register Voice")
 
     recognize_voice_4.add_children([known_voice_6, register_voice_7])
-
-    # voice_id_on_4 = Condition("Voice ID On?")
-    # voice_recognized_5 = Selector("Voice Recognized?", memory=False)
-    # transcribe_audio_6 = Action("Transcribe Audio")
-    # cora_response_7 = Selector("Cora Response", memory=False)
-
-    # process_audio_3.add_children([voice_id_on_4, voice_recognized_5, transcribe_audio_6, cora_response_7])
-
-    # known_voice_8 = Condition("Known Voice?")
-    # unknown_voice_9 = Selector("Unknown Voice", memory=False)
-    
-    # voice_recognized_5.add_children([known_voice_8, unknown_voice_9])
-
-    # decline_enrollment_12 = Condition("Decline Enrollment?")
-    # accept_enrollment_13 = Sequence("Accept Enrollment", memory=True)
-
-    # unknown_voice_9.add_children([decline_enrollment_12, accept_enrollment_13])
-
-    # get_name_14 = Action("Get Name")
-    # record_samples_15 = Action("Record Samples")
-    # embed_voice_16 = Sequence("Embed Voice", memory=True)
-    # save_db_17 = Action("Save DB")
-
-    # accept_enrollment_13.add_children([get_name_14, record_samples_15, embed_voice_16, save_db_17])
-
-    # build_vectors_18 = Action("Build Vectors")
-    # embedded_file_19 = Condition("Embedded File Exists?")
-
-    # embed_voice_16.add_children([build_vectors_18, embedded_file_19])
-
-    # style_change_10 = Sequence("Style Change", memory=True)
-    # normal_response_11 = Action("Normal Response")
-
-    # cora_response_7.add_children([style_change_10, normal_response_11])
-
-    # style_change_command_20 =  Condition("Style Change Command?")
-    # style_adjustment_21 = Action("Style Adjustment")
-
-    # style_change_10.add_children([style_change_command_20, style_adjustment_21])
 
     return root_1
 
