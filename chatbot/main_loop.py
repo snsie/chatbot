@@ -33,17 +33,10 @@ async def main_loop(detector: UtteranceDetector, stt: WhisperSTT, convo: Convers
     print("🎤 Listening…", flush=True)
 
     audio = await asyncio.to_thread(detector.record_once)  # Add back the asyncio.to_thread()
-    
-    def validate_audio_capture(audio):
-        """Check if audio was successfully captured."""
-        if audio is None or not len(audio):
-            print("🛑 No audio captured.")
-            return False
-        return True
 
-    # Replace the selection with:
     if not validate_audio_capture(audio):
         return  # Nothing captured; loop again
+    
     try:
         print("📝 Transcribing…", flush=True)
         transcript = await asyncio.to_thread(stt.transcribe, audio)
