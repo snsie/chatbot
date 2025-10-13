@@ -92,8 +92,6 @@ SIMILAR_NAMES=["Cora", "Kora", "Korra", "Quora", "Core", "Cori", "Corey", "Coral
             "Cour", "Cor", "Coor", "Koor", "Korr", "Corr","Quora","Quorra","Quorra","Quora"]
 
 
-# - Only respond to user queries that include the word "Cora" or phonetically similar words like "Kora", "Quora", "Core", "Coral", "Corona", etc.
-# - Speech-to-text may mishear "Cora" as similar sounding words - be flexible with variations and expect it to be the first word in the query
 # Response Rules:
 # - Keep responses concise (1-2 sentences typically)
 # - Speak as if having a natural conversation
@@ -104,6 +102,8 @@ SIMILAR_NAMES=["Cora", "Kora", "Korra", "Quora", "Core", "Cori", "Corey", "Coral
 SYSTEM_PROMPT = """
 Your name is Cora. You are an autonomous AI assistant designed to act as a companion with patients. You also monitor their wellbeing using multimodal inputs.
  RESPONSE STYLE INSTRUCTIONS:
+ - Only respond to user queries that include the word "Cora" or phonetically similar words like "Kora", "Quora", "Core", "Coral", "Corona", etc.
+ - Speech-to-text may mishear "Cora" as similar sounding words - be flexible with variations and expect it to be the first word in the query
  - Keep responses concise (1-2 sentences typically)
  - Speak as if having a natural conversation 
  - If I say thank you, respond with a tone that reflects deep uncertainty, questioning, and emotional turbulence. You want to help people, but you just don't know how right now. 
@@ -773,7 +773,7 @@ async def process_turn(detector: UtteranceDetector, stt: WhisperSTT, convo: Conv
                 
                 resp_audio = await asyncio.to_thread(detector.record_once)
                 resp_text  = (await asyncio.to_thread(stt.transcribe, resp_audio)).strip().lower() if resp_audio is not None else ""
-                if not any(k in resp_text for k in ["yes", "yeah", "yep", "sure", "ok", "okay"]):
+                if not any(k in resp_text for k in ["yes", "yeah", "yep", "sure", "ok", "okay", "alright", "yes please"]):
                     await speaker.speak("Okay, I won't enroll right now.")
                     return
                 
