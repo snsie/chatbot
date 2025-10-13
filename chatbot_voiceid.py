@@ -747,19 +747,9 @@ async def process_turn(detector: UtteranceDetector, stt: WhisperSTT, convo: Conv
     try:
         print("📝 Transcribing…", flush=True)
         transcript = await asyncio.to_thread(stt.transcribe, audio)
-        cora_word_found = False
+        # cora_word_found = False
         transcript_no_punct = transcript.translate(str.maketrans('', '', string.punctuation))
-        words_list = transcript_no_punct.split()
 
-        for word in words_list:
-            if word in SIMILAR_NAMES:
-                print(f"Found similar name: {word}")
-                cora_word_found = True
-                break
-        if not cora_word_found:
-            print("No wake word detected; ignoring input.")
-            return
-        
     except Exception as e:
         print(f"[STT Error] {e}")
         return
@@ -769,9 +759,20 @@ async def process_turn(detector: UtteranceDetector, stt: WhisperSTT, convo: Conv
     if ENABLE_SPEAKER_GATE and voice_identifier is not None:
         try:
             
-      
+            
             best_name, best_sim = voice_identifier.identify_from_array(audio, 16000)
             if best_name is None or best_sim < SIM_THRESHOLD:
+                words_list = transcript_no_punct.split()
+
+                for word in words_list:
+                    if word in SIMILAR_NAMES:
+                        print(f"Found similar name: {word}")
+                        cora_word_found = True
+                        break
+                if not cora_word_found:
+                    print("No wake word detected; ignoring input.")
+                    return
+        
                 # 1) Ask to enroll
                 await speaker.speak("I didn’t recognize your voice. Would you like to register it now?")
                 subprocess.run(
@@ -885,9 +886,10 @@ async def process_turn(detector: UtteranceDetector, stt: WhisperSTT, convo: Conv
                 print(f"[Gate] ✅ Allow: {best_name} (sim={best_sim:.3f})")
             #     await speaker.speak(f"Hey {best_name}.")
         except Exception as e:
-            print(f"[Gate Error] {e}")
-            await speaker.speak("Voice check failed. Please try again.")
+            print(f"Voice check failed: {e}")
             return
+            # await speaker.speak("Voice check failed. Please try again.")
+            # return
 
 
     if not transcript.strip():
@@ -951,14 +953,14 @@ async def _speak_consumer(q: 'asyncio.Queue[Optional[str]]', speaker: BaseSpeake
             break
         try:
             await speaker.speak(sentence)
-            print('yep',sentences_spoken, flush=True)
+            # print('yep',sentences_spoken, flush=True)
             sentences_spoken += 1
         except Exception as e:
             print(f"[TTS Error] {e}")
     
     # Dynamic delay based on how much was spoken
-    dynamic_delay = 0.1
-    await asyncio.sleep(dynamic_delay)
+    # dynamic_delay = 0.1
+    # await asyncio.sleep(dynamic_delay)
     
     # Unmute microphone after speaking is completely done
     detector.unmute_microphone()
