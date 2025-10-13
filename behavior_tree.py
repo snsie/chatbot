@@ -25,7 +25,7 @@ from py_trees.composites import Sequence, Selector # used to create a sequence o
 from py_trees.decorators import EternalGuard
 from py_trees import logging as log_tree # used for terminal prints (visualization of ticks)
 
-async def active_listening(detector:UtteranceDetector, stt: WhisperSTT):
+async def active_listening(detector:UtteranceDetector, stt: WhisperSTT) -> bool:
     print("🎤 Listening…", flush=True)
 
     audio = await asyncio.to_thread(detector.record_once)  # Add back the asyncio.to_thread()
@@ -44,7 +44,7 @@ async def active_listening(detector:UtteranceDetector, stt: WhisperSTT):
             if word in SIMILAR_NAMES:
                 print(f"Found similar name: {word}")
                 cora_word_found = True
-                return True
+                return transcript, audio
         if not cora_word_found:
             print("No wake word detected; ignoring input.")
             return False
@@ -53,7 +53,7 @@ async def active_listening(detector:UtteranceDetector, stt: WhisperSTT):
         print(f"[STT Error] {e}")
         return False
 
-async def voice_registration(detector: UtteranceDetector, stt: WhisperSTT, convo: Conversation, speaker: BaseSpeaker):
+async def voice_registration(detector: UtteranceDetector, stt: WhisperSTT, convo: Conversation, speaker: BaseSpeaker) -> bool | str:
     # 1) Ask to enroll
     await speaker.speak("I didn’t recognize your voice. Would you like to register it now?")
     
@@ -154,12 +154,13 @@ async def voice_registration(detector: UtteranceDetector, stt: WhisperSTT, convo
     conf_name, conf_sim = voice_identifier.identify_from_array(confirm, 16000)
     if conf_name == user_name:
         await speaker.speak(f"Verification passed with similarity {conf_sim:.2f}.")
-        return True
+        # return user_name
     else:
         await speaker.speak("Verification was low; we can add more samples later.")
-        return False
+        # return False
+    return user_name
 
-async def cora_response(detector: UtteranceDetector, stt: WhisperSTT, convo: Conversation, speaker: BaseSpeaker, best_name):
+async def cora_response(detector: UtteranceDetector, stt: WhisperSTT, convo: Conversation, speaker: BaseSpeaker, best_name) -> None:
     print("🤖 Assistant (streaming)…", flush=True)
 
     # Streaming generation
@@ -188,7 +189,7 @@ async def cora_response(detector: UtteranceDetector, stt: WhisperSTT, convo: Con
     full_assistant_text = ' '.join(assistant_buffer)
     convo.add_assistant(full_assistant_text)
 
-async def _speak_consumer(q: 'asyncio.Queue[Optional[str]]', speaker: BaseSpeaker, detector: UtteranceDetector):
+async def _speak_consumer(q: 'asyncio.Queue[Optional[str]]', speaker: BaseSpeaker, detector: UtteranceDetector) -> None:
     sentences_spoken = 0
     
     # Mute microphone when starting to speak
@@ -215,8 +216,8 @@ async def _speak_consumer(q: 'asyncio.Queue[Optional[str]]', speaker: BaseSpeake
 
 async def process_turn(detector: UtteranceDetector, stt: WhisperSTT, convo: Conversation, speaker: BaseSpeaker):
     ##### 1. active listening ######
-    cora_detected_audio = active_listening(detector, stt)
-    if(not cora_detected_audio):
+    transcript, audio = await active_listening(detector, stt)
+    if not transcript or not audio:
         return
 
     ######### 2. voice recognition #########
@@ -224,9 +225,10 @@ async def process_turn(detector: UtteranceDetector, stt: WhisperSTT, convo: Conv
         try:
             best_name, best_sim = voice_identifier.identify_from_array(audio, 16000)
             if best_name is None or best_sim < SIM_THRESHOLD:
-                was_voice_registered = voice_registration(detector, stt, convo, speaker)
-                if(not was_voice_registered):
+                user_name = await voice_registration(detector, stt, convo, speaker)
+                if not user_name:
                     return
+                best_name = user_name
         except Exception as e:
             print(f"[Gate Error] {e}")
             await speaker.speak("Voice check failed. Please try again.")
@@ -250,7 +252,7 @@ async def process_turn(detector: UtteranceDetector, stt: WhisperSTT, convo: Conv
         return
 
     ############ 5. cora response #############
-    cora_response(detector, stt, convo, speaker, best_name)
+    await cora_response(detector, stt, convo, speaker, best_name)
 
 # =============================
 # Entry Point
