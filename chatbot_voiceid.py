@@ -21,7 +21,15 @@ Features
    - edge-tts (optional, higher quality, requires internet + ffmpeg)
 7. Clean shutdown on Ctrl+C.
 
-Configuration (edit constants below) controls sample rate, model names, thresholds, etc.
+Configuration (edit constants b        except Exception as e:
+            print(f"[TTS Error] {e}")
+    
+    # Configurable delay after speaking before reactivating microphone
+    await asyncio.sleep(POST_SPEECH_DELAY)
+    
+    # Unmute microphone after speaking is completely done
+    detector.unmute_microphone()
+    print("🔊 Microphone reactivated")rols sample rate, model names, thresholds, etc.
 
 Dependencies (pip install ...)
 ------------------------------
@@ -700,32 +708,32 @@ class Conversation:
 #SIM_THRESHOLD = 0.65
 #USE_SEPARATION = True  # flip on/off easily
 
-async def handle_chunk(audio_np: np.ndarray, sr: int = 16000):
-    # Optional fast gate: if you suspect no overlap, you can skip separation.
-    stems = [audio_np]
-    if USE_SEPARATION:
-        try:
-            stems = separate(audio_np, sr=sr)  # -> (2, T)
-        except Exception as e:
-            print(f"[sepformer] failed, falling back: {e}")
+# async def handle_chunk(audio_np: np.ndarray, sr: int = 16000):
+#     # Optional fast gate: if you suspect no overlap, you can skip separation.
+#     stems = [audio_np]
+#     if USE_SEPARATION:
+#         try:
+#             stems = separate(audio_np, sr=sr)  # -> (2, T)
+#         except Exception as e:
+#             print(f"[sepformer] failed, falling back: {e}")
 
-    # Run your existing voice ID on each candidate stem
-    best_name, best_sim, best_audio = None, -1.0, None
-    for i, stem in enumerate(stems):
-        name, sim = identify_from_array(stem, sr)  # your function
-        print(f"[voice-id] stem{i}: name={name} sim={sim:.3f}")
-        if sim > best_sim:
-            best_name, best_sim, best_audio = name, sim, stem
+#     # Run your existing voice ID on each candidate stem
+#     best_name, best_sim, best_audio = None, -1.0, None
+#     for i, stem in enumerate(stems):
+#         name, sim = identify_from_array(stem, sr)  # your function
+#         print(f"[voice-id] stem{i}: name={name} sim={sim:.3f}")
+#         if sim > best_sim:
+#             best_name, best_sim, best_audio = name, sim, stem
 
-    if best_sim < SIM_THRESHOLD or best_audio is None:
-        # No trusted match → do not respond
-        await speaker.speak("I heard speech, but it didn't match a registered voice.")
-        return
+#     if best_sim < SIM_THRESHOLD or best_audio is None:
+#         # No trusted match → do not respond
+#         await speaker.speak("I heard speech, but it didn't match a registered voice.")
+#         return
 
-    # Proceed with ASR → LLM → TTS using best_audio only
-    text = await asr.transcribe(best_audio, sr)   # your ASR call
-    reply = await agent.respond(text, speaker=best_name)
-    await tts.speak(reply)
+#     # Proceed with ASR → LLM → TTS using best_audio only
+#     text = await asr.transcribe(best_audio, sr)   # your ASR call
+#     reply = await agent.respond(text, speaker=best_name)
+#     await tts.speak(reply)
 # =============================
 # Main Loop Logic
 # =============================
@@ -761,18 +769,19 @@ async def process_turn(detector: UtteranceDetector, stt: WhisperSTT, convo: Conv
     if ENABLE_SPEAKER_GATE and voice_identifier is not None:
         try:
             
-            # subprocess.run(
-            #         ["python", "build_enrollments.py", "--root", "data", "--out", ENROLL_PATH],
-            #         check=True
-            #     )
-            # voice_identifier.reload_enrollments(ENROLL_PATH)
+      
             best_name, best_sim = voice_identifier.identify_from_array(audio, 16000)
             if best_name is None or best_sim < SIM_THRESHOLD:
                 # 1) Ask to enroll
                 await speaker.speak("I didn’t recognize your voice. Would you like to register it now?")
-                
+                subprocess.run(
+                        ["python", "build_enrollments.py", "--root", "data", "--out", ENROLL_PATH],
+                        check=True
+                        )
+                voice_identifier.reload_enrollments(ENROLL_PATH)
                 resp_audio = await asyncio.to_thread(detector.record_once)
                 resp_text  = (await asyncio.to_thread(stt.transcribe, resp_audio)).strip().lower() if resp_audio is not None else ""
+                print(f"[Enroll] User response: {resp_text}",flush=True)
                 if not any(k in resp_text for k in ["yes", "yeah", "yep", "sure", "ok", "okay", "alright", "yes please"]):
                     await speaker.speak("Okay, I won't enroll right now.")
                     return
@@ -942,12 +951,13 @@ async def _speak_consumer(q: 'asyncio.Queue[Optional[str]]', speaker: BaseSpeake
             break
         try:
             await speaker.speak(sentence)
+            print('yep',sentences_spoken, flush=True)
             sentences_spoken += 1
         except Exception as e:
             print(f"[TTS Error] {e}")
     
     # Dynamic delay based on how much was spoken
-    dynamic_delay = 0.5
+    dynamic_delay = 0.1
     await asyncio.sleep(dynamic_delay)
     
     # Unmute microphone after speaking is completely done
