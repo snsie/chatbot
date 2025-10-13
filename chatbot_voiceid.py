@@ -1180,7 +1180,7 @@ async def _speak_consumer(q: 'asyncio.Queue[Optional[str]]', speaker: BaseSpeake
 async def process_turn(detector: UtteranceDetector, stt: WhisperSTT, convo: Conversation, speaker: BaseSpeaker):
     ##### 1. active listening ######
     transcript, audio = await active_listening(detector, stt)
-    if not transcript or not audio:
+    if not transcript or audio is None or len(audio) == 0:
         return
 
     ######### 2. voice recognition #########
