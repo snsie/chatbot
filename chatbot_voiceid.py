@@ -872,8 +872,8 @@ async def process_turn(detector: UtteranceDetector, stt: WhisperSTT, convo: Conv
                     await speaker.speak(f"Verification passed with similarity {conf_sim:.2f}.")
                 else:
                     await speaker.speak("Verification was low; we can add more samples later.")
-            # else:
-            #     print(f"[Gate] ✅ Allow: {best_name} (sim={best_sim:.3f})")
+            else:
+                print(f"[Gate] ✅ Allow: {best_name} (sim={best_sim:.3f})")
             #     await speaker.speak(f"Hey {best_name}.")
         except Exception as e:
             print(f"[Gate Error] {e}")
