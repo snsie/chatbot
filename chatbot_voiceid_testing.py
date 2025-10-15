@@ -185,6 +185,8 @@ SIM_THRESHOLD = 0.65 if CROWD_MODE else 0.55
 from speechbrain.pretrained import SepformerSeparation as Separator
 from speechbrain.pretrained import EncoderClassifier
 device = "cuda"  # or "cpu" if needed
+from voice_sep import separate, get_sepformer
+
 
 sep_model = Separator.from_hparams(source="speechbrain/sepformer-whamr", run_opts={"device": device})
 spkrec     = EncoderClassifier.from_hparams(source="speechbrain/spkrec-ecapa-voxceleb", run_opts={"device": device})

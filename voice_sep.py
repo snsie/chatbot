@@ -7,8 +7,6 @@ from speechbrain.inference.separation import SepformerSeparation as Separator
 
 _SEPFORMER = None
 
-def _device() -> str:
-    return "cuda" if torch.cuda.is_available() else "cpu"
 
 def get_sepformer() -> Separator:
     """Lazy-load and cache the SpeechBrain SepFormer model."""
@@ -20,17 +18,21 @@ def get_sepformer() -> Separator:
         )
         _SEPFORMER.separation_model.to(_device()).eval()
     return _SEPFORMER
+def extract_target_voice(audio, sr, spkrec, target_emb, sim_threshold=0.65, device="cuda"):
+    from voice_sep import separate
+    stems = separate(audio, sr)
+    best_sim, best_idx, best_stem = 0.0, None, None
 
-def _ensure_mono_float(audio: np.ndarray) -> np.ndarray:
-    a = np.asarray(audio)
-    if a.ndim == 2:  # (C,T) -> mono
-        a = a.mean(axis=0)
-    return a.astype(np.float32, copy=False)
+    for i, stem in enumerate(stems):
+        emb = spkrec.encode_batch(torch.tensor(stem).unsqueeze(0).to(device))
+        sim = cosine_similarity(emb.cpu().numpy(), target_emb)
+        if sim > best_sim:
+            best_sim, best_idx, best_stem = sim, i, stem
 
-def _resample(wav: torch.Tensor, sr_in: int, sr_out: int) -> torch.Tensor:
-    if sr_in == sr_out:
-        return wav
-    return torchaudio.functional.resample(wav, sr_in, sr_out)
+    if best_sim < sim_threshold:
+        return audio, best_sim, best_idx, False  # no good match
+    else:
+        return best_stem, best_sim, best_idx, True
 
 def separate(
     audio: np.ndarray,
