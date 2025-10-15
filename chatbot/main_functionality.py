@@ -46,9 +46,9 @@ class MainFunctionality:
   async def transcribing_audio(self) -> bool:
     try:
       print("📝 Transcribing…", flush=True)
-      transcript = await asyncio.to_thread(stt.transcribe, audio)
+      self.transcript = await asyncio.to_thread(self.stt.transcribe, self.audio)
       cora_word_found = False
-      transcript_no_punct = transcript.translate(str.maketrans('', '', string.punctuation))
+      transcript_no_punct = self.transcript.translate(str.maketrans('', '', string.punctuation))
       words_list = transcript_no_punct.split()
 
       for word in words_list:
@@ -181,6 +181,19 @@ class MainFunctionality:
         await self.speaker.speak("Voice check failed. Please try again.")
         return False
 
+  async def style_commands(self) -> bool:
+    is_style_command = self.convo._detect_style_commands(self.transcript)
+    self.convo.add_user(self.transcript)
+    
+    if is_style_command:
+        # For style commands, give immediate feedback instead of calling LLM
+        current_style = self.convo.get_current_style()
+        response = f"I've updated my response style. Current style: {current_style}"
+        print(f"Assistant ↳ {response}")
+        await self.speaker.speak(response)
+        self.convo.add_assistant(response)
+        return
+
   async def main_loop(self):
     print("🎤 Listening…", flush=True)
 
@@ -196,4 +209,6 @@ class MainFunctionality:
        if not self.voice_check_and_registration():
           return
        
-    
+    if not self.transcript.strip():
+        return
+    print(f"You: {self.transcript}")
