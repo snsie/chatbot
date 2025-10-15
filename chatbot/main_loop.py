@@ -165,8 +165,6 @@ async def main_loop(detector: UtteranceDetector, stt: WhisperSTT, convo: Convers
     is_style_command = convo._detect_style_commands(transcript)
     convo.add_user(transcript)
     
-   
-
     if is_style_command:
         # For style commands, give immediate feedback instead of calling LLM
         current_style = convo.get_current_style()

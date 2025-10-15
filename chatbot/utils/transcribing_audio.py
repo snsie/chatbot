@@ -1,8 +1,9 @@
 import asyncio
 import string
+from ..constants import SIMILAR_NAMES
 
 
-async def transcribing_audio(stt, audio, SIMILAR_NAMES):
+async def transcribing_audio(stt, audio):
   try:
       print("📝 Transcribing…", flush=True)
       transcript = await asyncio.to_thread(stt.transcribe, audio)
