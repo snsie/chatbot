@@ -23,7 +23,7 @@ from dotenv import load_dotenv
 import os
 from .voice_id.get_voice_identifier import get_voice_identifier
 from typing import List
-from .utils import validate_audio_capture
+from .utils import validate_audio_capture, transcribing_audio
 
 
 load_dotenv()
@@ -37,36 +37,11 @@ async def main_loop(detector: UtteranceDetector, stt: WhisperSTT, convo: Convers
     if not validate_audio_capture(audio):
         return  # Nothing captured; loop again
     
-    try:
-        print("📝 Transcribing…", flush=True)
-        transcript = await asyncio.to_thread(stt.transcribe, audio)
-        cora_word_found = False
-        transcript_no_punct = transcript.translate(str.maketrans('', '', string.punctuation))
-        words_list = transcript_no_punct.split()
-
-        for word in words_list:
-            if word in SIMILAR_NAMES:
-                print(f"Found similar name: {word}")
-                cora_word_found = True
-                break
-        if not cora_word_found:
-            print("No wake word detected; ignoring input.")
-            return
-        
-    except Exception as e:
-        print(f"[STT Error] {e}")
-        return
+    if not transcribing_audio(stt, audio, SIMILAR_NAMES):
+        return # transcription failed or "cora" not found; loop again
     
-           
-
     if ENABLE_SPEAKER_GATE and voice_identifier is not None:
         try:
-            
-            # subprocess.run(
-            #         ["python", "build_enrollments.py", "--root", "data", "--out", ENROLL_PATH],
-            #         check=True
-            #     )
-            # voice_identifier.reload_enrollments(ENROLL_PATH)
             best_name, best_sim = voice_identifier.identify_from_array(audio, 16000)
             if best_name is None or best_sim < SIM_THRESHOLD:
                 # 1) Ask to enroll
