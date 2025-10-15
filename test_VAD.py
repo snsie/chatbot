@@ -176,7 +176,7 @@ people = mongo["voice_db"]["people"]  # single collection for profiles
 # --- VAD refinements ---
 import collections
 PRE_ROLL_MS = 250            # keep ~250 ms of audio BEFORE VAD says "start"
-ENERGY_DBFS_FLOOR = -45.0    # discard segments quieter than this (dBFS)
+ENERGY_DBFS_FLOOR = -1.0    # discard segments quieter than this (dBFS)
 
 
 # pydantic setup

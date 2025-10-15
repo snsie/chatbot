@@ -81,7 +81,7 @@ Press Ctrl+C to exit cleanly.
 # =============================
 SAMPLE_RATE = 16000
 FRAME_MS = 30  # ms per frame for capture + VAD
-VAD_AGGRESSIVENESS = 2  # 0-3 (higher = more aggressive speech detection)
+VAD_AGGRESSIVENESS = 3  # 0-3 (higher = more aggressive speech detection)
 MIN_UTTERANCE_MS = 200  # minimum voiced audio required to accept an utterance
 TRAILING_SILENCE_MS = 800  # silence to mark end of utterance
 
