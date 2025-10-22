@@ -7,7 +7,7 @@ from .streaming.sentence_stream import sentence_stream
 from .streaming.ollama_stream_chat import ollama_stream_chat
 from .constants import (
     OLLAMA_MODEL, MAX_TOKENS, PRINT_PARTIAL_SENTENCES,
-    ENABLE_SPEAKER_GATE, SIMILAR_NAMES, ENROLL_PATH, SIM_THRESHOLD  
+    ENABLE_SPEAKER_GATE, SIMILAR_NAMES, ENROLL_PATH, SIM_THRESHOLD, WHISPER_COMPUTE, WHISPER_MODEL, SYSTEM_PROMPT
 )
 import asyncio
 import string
@@ -27,8 +27,8 @@ from typing import List
 class MainFunctionality:
     def __init__(self):        
         self.detector = UtteranceDetector()
-        self.stt = WhisperSTT()
-        self.convo = Conversation()
+        self.stt = WhisperSTT(WHISPER_MODEL, compute=WHISPER_COMPUTE)
+        self.convo = Conversation(SYSTEM_PROMPT)
         self.speaker = BaseSpeaker()
         self.voice_identifier = _VoiceIdentifier()
         self.people = get_people_collection()
