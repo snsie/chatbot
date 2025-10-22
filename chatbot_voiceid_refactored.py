@@ -119,19 +119,14 @@ async def main():
 
     bot = MainFunctionality()
 
-    detector = UtteranceDetector()
-    stt = WhisperSTT(WHISPER_MODEL, WHISPER_COMPUTE)
-    speaker = await create_speaker()
-    convo = Conversation(SYSTEM_PROMPT)
-
     try:
         while True:
-            await main_loop(detector, stt, convo, speaker, voice_identifier, people)
+            await bot.main_loop()
     except KeyboardInterrupt:
         print("\nExiting…")
     finally:
-        await speaker.close()
-
+        if hasattr(bot.speaker, "close"):
+            await bot.speaker.close()
 
 if __name__ == '__main__':
     try:
