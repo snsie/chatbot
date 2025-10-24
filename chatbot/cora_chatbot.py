@@ -1,5 +1,4 @@
-from .speakers import _speak_consumer, BaseSpeaker, create_speaker
-from .voice_id.voice_identifier import _VoiceIdentifier
+from .speakers import _speak_consumer, create_speaker
 from .listeners.whisper_stt import WhisperSTT
 from .memory.conversation_memory import Conversation
 from .utils.utterance_detector import UtteranceDetector
@@ -19,18 +18,36 @@ import subprocess
 from .utils.database import get_people_collection
 from pydantic import ValidationError
 from .voice_id.person import Person
-from dotenv import load_dotenv
-import os
 from .voice_id.get_voice_identifier import get_voice_identifier
-from typing import List
 
-class MainFunctionality:
+class CoraChatbot:
+    """
+    Orchestrates one half‑duplex voice interaction turn:
+      1) Capture a single utterance via VAD.
+      2) Transcribe with Whisper.
+      3) Optionally gate on recognized speaker and enroll if unknown.
+      4) Stream LLM response while speaking sentences via TTS.
+      5) Append the response to conversation history.
+
+    Attributes:
+        detector: VAD-based utterance detector for microphone capture.
+        stt: Whisper speech-to-text wrapper.
+        convo: Conversation memory for system/user/assistant messages.
+        speaker: Active TTS speaker instance (created lazily).
+        voice_identifier: Voice-ID helper for gating and enrollment.
+        people: MongoDB collection handle for voice profiles.
+        audio: Last captured utterance audio (float32 numpy array) or None.
+        transcript: Last transcribed text for the captured utterance.
+        assistant_buffer: Accumulates streamed assistant sentences for history.
+        is_style_command: Flag when the user issues a style command.
+        best_name: Recognized/enrolled display name for the current speaker (safe default).
+    """
     def __init__(self):        
         self.detector = UtteranceDetector()
         self.stt = WhisperSTT(WHISPER_MODEL, compute=WHISPER_COMPUTE)
         self.convo = Conversation(SYSTEM_PROMPT)
-        self.speaker = BaseSpeaker()
-        self.voice_identifier = _VoiceIdentifier()
+        self.speaker = None
+        self.voice_identifier = get_voice_identifier(ENROLL_PATH) if ENABLE_SPEAKER_GATE else None
         self.people = get_people_collection()
 
         self.audio = None
@@ -38,17 +55,43 @@ class MainFunctionality:
         self.assistant_buffer = []
         self.is_style_command = False
 
-    async def voice_check_and_registration(self):
-        print("hi")
+    async def ensure_tts_ready(self):
+        """
+        Lazily create and cache the TTS speaker instance.
 
-    async def validate_audio_capture(self) -> bool:
-        # Check if audio was successfully captured
+        Rationale:
+        - __init__ cannot await.
+        - TTS backends are heavy; initialize only when needed.
+        - Idempotent; safe to call multiple times.
+        """
+        if self.speaker is None:
+            self.speaker = await create_speaker()
+
+    async def validate_captured_audio(self) -> bool:
+        """
+        Validate that an utterance was captured into self.audio.
+
+        Returns:
+            True if audio is present and non-empty; False otherwise.
+        """
         if self.audio is None or not len(self.audio):
             print("🛑 No audio captured.")
             return False
         return True
   
-    async def transcribing_audio(self) -> bool:
+    async def transcribe_and_check_wake_word(self) -> bool:
+        """
+        Transcribe self.audio and check for a wake-word token.
+
+        Behavior:
+            - Uses Whisper to transcribe the captured utterance.
+            - Strips punctuation and scans tokens for any in SIMILAR_NAMES.
+            - On success, sets self.transcript and returns True.
+            - If wake word not found, returns False (turn is ignored).
+
+        Returns:
+            True on successful transcription and wake-word match; else False.
+        """
         try:
             print("📝 Transcribing…", flush=True)
             self.transcript = await asyncio.to_thread(self.stt.transcribe, self.audio)
@@ -70,7 +113,23 @@ class MainFunctionality:
             print(f"[STT Error] {e}")
             return False
 
-    async def voice_check_and_registration(self) -> bool:
+    async def verify_speaker_or_enroll(self) -> bool:
+        """
+        Gate on recognized speaker; offer interactive enrollment if unknown.
+
+        Flow:
+            - Identify current speaker from self.audio.
+            - If not recognized or below SIM_THRESHOLD:
+                1) Ask if the user wants to enroll.
+                2) If yes, collect a display name and several short samples.
+                3) Rebuild enrollments and reload in-memory voice-ID.
+                4) Persist centroid embedding and metadata to MongoDB.
+                5) Thank the user and optionally confirm with a final sample.
+            - On recognized speaker, allow the turn to proceed.
+
+        Returns:
+            True if the turn should proceed; False if user declined or on failure.
+        """
         try:
             self.best_name, best_sim = self.voice_identifier.identify_from_array(self.audio, 16000)
             if self.best_name is None or best_sim < SIM_THRESHOLD:
@@ -116,10 +175,6 @@ class MainFunctionality:
                 # 4) re runs build_enrollments.py to update enrollments.npz and reload into voice_id memory
                 await asyncio.to_thread(subprocess.run, ["python", "build_enrollments.py", "--root", "data", "--out", ENROLL_PATH], check=True)
 
-                # subprocess.run(
-                #     ["python", "build_enrollments.py", "--root", "data", "--out", ENROLL_PATH],
-                #     check=True
-                # )
                 self.voice_identifier.reload_enrollments(ENROLL_PATH)
 
                 # 5) Read the centroid for this user from enrollments.npz and upsert ONE Mongo doc
@@ -148,7 +203,7 @@ class MainFunctionality:
                     
                     # Validate with Pydantic --> creating Person object that checks against types of person_data
                     person = Person(**person_data)
-                    
+
                     # insert into mongodb if successful validation of data types
                     self.people.update_one(
                         {"name": user_name},
@@ -170,7 +225,7 @@ class MainFunctionality:
                     return False
                 
                 await self.speaker.speak(f"Thanks {user_name}. Your voice has been registered.")
-
+                self.best_name = user_name
                 # 5) Optional immediate re-check
                 await self.speaker.speak("Say one more sentence to confirm.")
                 confirm = await asyncio.to_thread(self.detector.record_once)
@@ -180,15 +235,19 @@ class MainFunctionality:
                 else:
                     await self.speaker.speak("Verification was low; we can add more samples later.")
                 return True
-            # else:
-            #     print(f"[Gate] ✅ Allow: {best_name} (sim={best_sim:.3f})")
-            #     await speaker.speak(f"Hey {best_name}.")
+            else:
+                print(f"[Gate] ✅ Allow: {self.best_name} (sim={best_sim:.3f})")
+                return True
         except Exception as e:
             print(f"[Gate Error] {e}")
             await self.speaker.speak("Voice check failed. Please try again.")
             return False
 
-    async def style_commands(self) -> bool:
+    async def handle_style_command_feedback(self) -> None:
+        """
+        If the latest user message was a style command, provide immediate
+        confirmation feedback and persist it to the conversation.
+        """
         if self.is_style_command:
             # For style commands, give immediate feedback instead of calling LLM
             current_style = self.convo.get_current_style()
@@ -198,7 +257,16 @@ class MainFunctionality:
             self.convo.add_assistant(response)
             return
 
-    async def streaming_generation(self):
+    async def stream_llm_and_tts(self):
+        """
+        Stream the LLM response and speak it sentence-by-sentence.
+
+        Behavior:
+            - Mutates the last user message to prepend a wake-word reminder.
+            - Streams tokens from Ollama, segments into sentences,
+              and feeds each sentence to TTS via a consumer task.
+            - Appends the full assistant response to conversation history.
+        """
         self.assistant_buffer = []
         self.sentences_queue: asyncio.Queue = asyncio.Queue()
         speak_consumer_task = asyncio.create_task(_speak_consumer(self.sentences_queue, self.speaker, self.detector))  # Pass detector
@@ -225,20 +293,25 @@ class MainFunctionality:
         self.convo.add_assistant(full_assistant_text)
         
 
-    async def main_loop(self):
+    async def run_turn(self):
+        """
+        Execute one interaction turn end-to-end:
+            capture -> transcribe -> speaker gate/enroll -> stream + speak.
+        """
+        await self.ensure_tts_ready()
         print("🎤 Listening…", flush=True)
 
         self.audio = await asyncio.to_thread(self.detector.record_once)  # Add back the asyncio.to_thread()
 
-        if not await self.validate_audio_capture():
+        if not await self.validate_captured_audio():
             return # no audio caputured
 
-        if not await self.transcribing_audio():
+        if not await self.transcribe_and_check_wake_word():
             return # transcription failed or "cora" not found
 
         if ENABLE_SPEAKER_GATE and self.voice_identifier is not None:
-            if not await self.voice_check_and_registration():
-                return
+            if not await self.verify_speaker_or_enroll():
+                return # speaker enrollment declined or failed
             
         if not self.transcript.strip():
             return
@@ -248,10 +321,10 @@ class MainFunctionality:
         self.convo.add_user(self.transcript)
 
         if self.is_style_command:
-            await self.style_commands()
+            await self.handle_style_command_feedback()
             return
             
         print("🤖 Assistant (streaming)…", flush=True)
 
-        await self.streaming_generation()
+        await self.stream_llm_and_tts() # generate and stream LLM response with TTS
 
