@@ -181,8 +181,15 @@ MONGO_URI = "mongodb://admin:Rob123%21@localhost:27017/admin"
 mongo = MongoClient(MONGO_URI)
 people = mongo["voice_db"]["people"]  # single collection for profiles
 
-
-
+# AEC
+from reverse_publisher import ReverseAudioPublisher
+reverse_pub = ReverseAudioPublisher(sample_rate=16000, frame_ms=30, max_frames=50)
+from webrtc_audio_processing import AudioProcessor
+apm = AudioProcessor()
+apm.enable_high_pass_filter(True)
+apm.enable_noise_suppression(True)
+apm.enable_automatic_gain_control(True)
+apm.enable_echo_cancellation(True)
 
 # pydantic setup
 from pydantic import BaseModel, Field, ValidationError
@@ -273,37 +280,49 @@ class UtteranceDetector:
                     return None
                     
                 try:
-                    frame = q.get(timeout=0.1)
+                    frame = q.get(timeout=0.1)                  # bytes (960 bytes @ 16k, 30 ms)
                 except queue.Empty:
                     continue
                 except KeyboardInterrupt:
                     raise
-                    
+
+                # 1) Feed latest speaker frame to AEC
+                reverse = reverse_pub.get_latest_frame()        # np.int16[480]
+                apm.analyze_reverse_stream(reverse)
+
+                # 2) Run APM on this mic frame
+                frame_i16  = np.frombuffer(frame, dtype=np.int16)   # -> np.int16[480]
+                proc_i16   = apm.process_stream(frame_i16)          # cleaned 30 ms frame
+                proc_bytes = proc_i16.tobytes()
+
+                # 3) VAD must see the processed frame
                 is_speech = False
                 try:
-                    is_speech = self.vad.is_speech(frame, SAMPLE_RATE)
+                    is_speech = self.vad.is_speech(proc_bytes, SAMPLE_RATE)
                 except Exception:
-                    # If VAD fails (rare), treat as silence
                     is_speech = False
+
+                # 4) Collect processed frames (not raw)
                 if not started:
                     if is_speech:
                         voiced_count += 1
-                        collected.append(frame)
+                        collected.append(proc_bytes)
                         if voiced_count >= MIN_VOICED_FRAMES:
                             started = True
                     else:
-                        # Reset (noise or short blips)
                         voiced_count = 0
                         collected.clear()
                     continue
+
                 # After started
-                collected.append(frame)
+                collected.append(proc_bytes)
                 if is_speech:
                     silence_count = 0
                 else:
                     silence_count += 1
                     if silence_count >= TRAILING_SILENCE_FRAMES:
-                        break  # end of utterance
+                        break
+
         if not collected:
             return None
         # Remove trailing silence frames for cleaner STT input
@@ -464,10 +483,12 @@ class EdgeTTSSpeaker(BaseSpeaker):
             raise
 
     async def speak(self, sentence: str):
+        import io
         import edge_tts
         from pydub import AudioSegment
         import simpleaudio as sa
-        # Synthesize
+
+        # 1) Synthesize to bytes (mp3)
         communicate = edge_tts.Communicate(sentence, voice=self.voice)
         audio_bytes = bytearray()
         async for chunk in communicate.stream():
@@ -476,11 +497,32 @@ class EdgeTTSSpeaker(BaseSpeaker):
         data = bytes(audio_bytes)
         if not data:
             return
-        # Decode / resample
+
+        # 2) Decode & normalize to the SAME format you will play: 16 kHz, mono, int16
         audio_seg = AudioSegment.from_file(io.BytesIO(data), format="mp3")
-        audio_seg = audio_seg.set_frame_rate(SAMPLE_RATE).set_channels(1).set_sample_width(2)
-        play_obj = sa.play_buffer(audio_seg.raw_data, num_channels=1, bytes_per_sample=2, sample_rate=audio_seg.frame_rate)
+        audio_seg = audio_seg.set_frame_rate(SAMPLE_RATE).set_channels(1).set_sample_width(2)  # int16
+
+        # 3) PUBLISH the exact PCM you are about to play (so AEC sees the true render stream)
+        #    raw_data = bytes in int16 little-endian; frame_rate == SAMPLE_RATE; channels == 1
+        frames_published = reverse_pub.publish_pcm(
+            audio_seg.raw_data,        # bytes buffer you will play
+            src_sample_rate=SAMPLE_RATE,
+            channels=1
+        )
+        # optional: 
+        print(f"[Reverse] Published {frames_published} frames for AEC")
+
+        # 4) PLAYBACK the very same PCM
+        play_obj = sa.play_buffer(
+            audio_seg.raw_data,
+            num_channels=1,
+            bytes_per_sample=2,
+            sample_rate=audio_seg.frame_rate  # should be SAMPLE_RATE
+        )
         play_obj.wait_done()
+
+        # 5) Flush any partial tail so reverse has a final 480-sample frame
+        reverse_pub.flush_tail(pad=True)
 
 class CoquiTTSSpeaker(BaseSpeaker):
     """Coqui TTS speaker using neural voice synthesis.
