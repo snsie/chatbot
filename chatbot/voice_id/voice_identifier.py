@@ -8,10 +8,6 @@ import torch
 from speechbrain.inference import EncoderClassifier
 from chatbot.constants import (ENROLL_PATH, ENABLE_SPEAKER_GATE) 
 
-
-
-
-
 class _VoiceIdentifier:
     def __init__(self, enroll_path: str = "enrollments.npz"):
         self.model = EncoderClassifier.from_hparams(
