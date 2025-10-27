@@ -184,12 +184,29 @@ people = mongo["voice_db"]["people"]  # single collection for profiles
 # AEC
 from reverse_publisher import ReverseAudioPublisher
 reverse_pub = ReverseAudioPublisher(sample_rate=16000, frame_ms=30, max_frames=50)
-from webrtc_audio_processing import AudioProcessor
-apm = AudioProcessor()
-apm.enable_high_pass_filter(True)
-apm.enable_noise_suppression(True)
-apm.enable_automatic_gain_control(True)
-apm.enable_echo_cancellation(True)
+#from webrtc_audio_processing import AudioProcessingModule as AP
+from webrtc_audio_processing import AudioProcessingModule
+
+# Create the processor
+apm = AudioProcessingModule()
+
+# Tell it what audio format you're using.
+# Adjust these if your mic is NOT 16 kHz mono.
+apm.set_stream_format(16000, 1)           # mic stream format
+apm.set_reverse_stream_format(16000, 1)   # playback/ref stream format
+
+# Tune the processing modules.
+# Typical ranges are small ints, e.g. 0=off/low ... 2 or 3=stronger.
+apm.set_aec_level(2)        # echo cancellation aggressiveness
+apm.set_ns_level(2)         # noise suppression strength
+apm.set_agc_level(2)        # automatic gain control mode/strength
+apm.set_agc_target(12)    # target loudness-ish; tweak later
+apm.set_vad_level(2)        # VAD sensitivity (lower = stricter voice detection)
+
+# How much audio output latency (ms) to expect between far-end and mic.
+# Start with 0; you can increase this if you get weird residual echo.
+apm.set_system_delay(0)
+
 
 # pydantic setup
 from pydantic import BaseModel, Field, ValidationError
@@ -288,7 +305,7 @@ class UtteranceDetector:
 
                 # 1) Feed latest speaker frame to AEC
                 reverse = reverse_pub.get_latest_frame()        # np.int16[480]
-                apm.analyze_reverse_stream(reverse)
+                #apm.process_reverse_stream(reverse)
 
                 # 2) Run APM on this mic frame
                 frame_i16  = np.frombuffer(frame, dtype=np.int16)   # -> np.int16[480]
