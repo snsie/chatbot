@@ -304,13 +304,31 @@ class UtteranceDetector:
                     raise
 
                 # 1) Feed latest speaker frame to AEC
-                reverse = reverse_pub.get_latest_frame()        # np.int16[480]
-                #apm.process_reverse_stream(reverse)
+                # frame: 30 ms mic bytes (960 bytes @ 16k, int16 mono)
+                # reverse_pub returns a 30 ms np.int16[480]; convert to bytes
+                reverse30 = reverse_pub.get_latest_frame().tobytes()  # 480 * 2 = 960 bytes
 
-                # 2) Run APM on this mic frame
-                frame_i16  = np.frombuffer(frame, dtype=np.int16)   # -> np.int16[480]
-                proc_i16   = apm.process_stream(frame_i16)          # cleaned 30 ms frame
-                proc_bytes = proc_i16.tobytes()
+                # Helper: slice a 30 ms block into 3 × 10 ms subframes (320 bytes each)
+                def chunks_10ms(buf: bytes):
+                    # 10 ms @ 16 kHz int16 mono = 160 samples = 320 bytes
+                    for i in range(3):
+                        start = i * 320
+                        yield buf[start:start+320]
+
+                # If reverse publisher is empty for some reason, use silence
+                if len(reverse30) != 960:
+                    reverse30 = b"\x00" * 960
+
+                # 1) AEC: feed reverse 10 ms chunk, then process mic 10 ms chunk — do this 3 times
+                out_parts = []
+                for rev10, mic10 in zip(chunks_10ms(reverse30), chunks_10ms(frame)):
+                    apm.process_reverse_stream(rev10)         # expects bytes (10 ms)
+                    out10 = apm.process_stream(mic10)         # expects bytes (10 ms), returns bytes
+                    out_parts.append(out10)
+
+                # Reassemble processed 30 ms block for VAD + collection
+                proc_bytes = b"".join(out_parts)              # 960 bytes (480 samples)
+
 
                 # 3) VAD must see the processed frame
                 is_speech = False
