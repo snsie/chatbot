@@ -19,6 +19,8 @@ class WhisperSTT:
         return 'cpu', 'int8'
 
     def transcribe(self, audio: np.ndarray) -> str:
-        segments, info = self.model.transcribe(audio, beam_size=1, vad_filter=False)
+        # segments, info = self.model.transcribe(audio, beam_size=1, vad_filter=False)
+        segments, info = self.model.transcribe(audio,vad_filter=True)
+
         text_parts = [seg.text.strip() for seg in segments]
         return ' '.join(part for part in text_parts if part)
