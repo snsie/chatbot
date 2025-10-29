@@ -307,7 +307,7 @@ class CoraChatbot:
             return # no audio caputured
 
         if not await self.transcribe_and_check_wake_word():
-            return # transcription failed or "cora" not found
+            return # transcription failed
 
         if ENABLE_SPEAKER_GATE and self.voice_identifier is not None:
             if not await self.verify_speaker_or_enroll():
