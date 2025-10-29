@@ -1,0 +1,53 @@
+#for AEC
+reserve_pub.py
+
+#all constant i defined here WEBRTC
+# AEC
+from reverse_publisher import ReverseAudioPublisher
+reverse_pub = ReverseAudioPublisher(sample_rate=16000, frame_ms=30, max_frames=50)
+from webrtc_audio_processing import AudioProcessingModule
+
+# Create the processor
+apm = AudioProcessingModule()
+
+apm.set_stream_format(16000, 1)           # mic stream format
+apm.set_reverse_stream_format(16000, 1)   # playback/ref stream format
+
+# Tune the processing modules.
+# Typical ranges are small ints, e.g. 0=off/low ... 2 or 3=stronger.
+apm.set_aec_level(2)        # echo cancellation aggressiveness
+apm.set_ns_level(2)         # noise suppression strength
+apm.set_agc_level(2)        # automatic gain control mode/strength
+apm.set_agc_target(12)    # target loudness-ish; tweak later
+apm.set_vad_level(2)        # VAD sensitivity (lower = stricter voice detection)
+
+# How much audio output latency (ms) to expect between far-end and mic.
+# Start with 0; you can increase this if you get weird residual echo.
+apm.set_system_delay(0)
+
+#this is the processing that happens in the record once function
+# 1) Feed latest speaker frame to AEC
+                # frame: 30 ms mic bytes (960 bytes @ 16k, int16 mono)
+                # reverse_pub returns a 30 ms np.int16[480]; convert to bytes
+                reverse30 = reverse_pub.get_latest_frame().tobytes()  # 480 * 2 = 960 bytes
+
+                # Helper: slice a 30 ms block into 3 × 10 ms subframes (320 bytes each)
+                def chunks_10ms(buf: bytes):
+                    # 10 ms @ 16 kHz int16 mono = 160 samples = 320 bytes
+                    for i in range(3):
+                        start = i * 320
+                        yield buf[start:start+320]
+
+                # If reverse publisher is empty for some reason, use silence
+                if len(reverse30) != 960:
+                    reverse30 = b"\x00" * 960
+
+                # 1) AEC: feed reverse 10 ms chunk, then process mic 10 ms chunk — do this 3 times
+                out_parts = []
+                for rev10, mic10 in zip(chunks_10ms(reverse30), chunks_10ms(frame)):
+                    apm.process_reverse_stream(rev10)         # expects bytes (10 ms)
+                    out10 = apm.process_stream(mic10)         # expects bytes (10 ms), returns bytes
+                    out_parts.append(out10)
+
+                # Reassemble processed 30 ms block for VAD + collection
+                proc_bytes = b"".join(out_parts)              # 960 bytes (480 samples)
