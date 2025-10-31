@@ -19,6 +19,46 @@ from .utils.database import get_people_collection
 from pydantic import ValidationError
 from .voice_id.person import Person
 from .voice_id.get_voice_identifier import get_voice_identifier
+from time import perf_counter
+from contextlib import contextmanager
+import os
+
+
+class TurnProfiler:
+    """
+    Simple per-turn profiler to measure durations of labeled stages.
+
+    Usage:
+        prof = TurnProfiler(enabled=True)
+        with prof.measure("capture_audio"):
+            ...
+        prof.finish()
+    """
+    def __init__(self, enabled: bool = True):
+        self.enabled = enabled
+        self._t0 = perf_counter()
+        self._steps = []  # list of (name, duration)
+
+    @contextmanager
+    def measure(self, name: str):
+        if not self.enabled:
+            yield
+            return
+        t0 = perf_counter()
+        try:
+            yield
+        finally:
+            dt = perf_counter() - t0
+            self._steps.append((name, dt))
+
+    def finish(self):
+        if not self.enabled:
+            return
+        total = perf_counter() - self._t0
+        # print("[Profile] Turn summary:")
+        # for n, dt in self._steps:
+        #     print(f" - {n}: {dt*1000:.1f} ms")
+        # print(f" - TOTAL: {total*1000:.1f} ms")
 
 class CoraChatbot:
     """
@@ -55,6 +95,8 @@ class CoraChatbot:
         self.assistant_buffer = []
         self.is_style_command = False
         self.best_name = None
+        # Enable/disable profiling via env var CHATBOT_PROFILE ("0"/"false" disables)
+        self.profile_enabled = os.getenv("CHATBOT_PROFILE", "1").lower() not in ("0", "false")
 
     async def ensure_tts_ready(self):
         """
@@ -306,33 +348,49 @@ class CoraChatbot:
         Execute one interaction turn end-to-end:
             capture -> transcribe -> speaker gate/enroll -> stream + speak.
         """
-        await self.ensure_tts_ready()
+        profiler = TurnProfiler(enabled=self.profile_enabled)
+        with profiler.measure("ensure_tts_ready"):
+            await self.ensure_tts_ready()
         print("🎤 Listening…", flush=True)
 
-        self.audio = await asyncio.to_thread(self.detector.record_once)  # Add back the asyncio.to_thread()
+        with profiler.measure("capture_audio"):
+            self.audio = await asyncio.to_thread(self.detector.record_once)  # Add back the asyncio.to_thread()
 
         if not await self.validate_captured_audio():
-            return # no audio caputured
+            profiler.finish()
+            return  # no audio captured
 
-        if not await self.transcribe_and_check_wake_word():
-            return # transcription failed
+        ok_transcribe = False
+        with profiler.measure("transcribe_and_wakeword"):
+            ok_transcribe = await self.transcribe_and_check_wake_word()
+        if not ok_transcribe:
+            profiler.finish()
+            return  # transcription failed
 
         if ENABLE_SPEAKER_GATE and self.voice_identifier is not None:
-            if not await self.verify_speaker_or_enroll():
-                return # speaker enrollment declined or failed
-            
+            with profiler.measure("speaker_gate_or_enroll"):
+                gate_ok = await self.verify_speaker_or_enroll()
+            if not gate_ok:
+                profiler.finish()
+                return  # speaker enrollment declined or failed
+
         if not self.transcript.strip():
+            profiler.finish()
             return
         print(f"You: {self.transcript}")
 
-        self.is_style_command = self.convo._detect_style_commands(self.transcript)
-        self.convo.add_user(self.transcript)
+        with profiler.measure("style_detection_and_add_user"):
+            self.is_style_command = self.convo._detect_style_commands(self.transcript)
+            self.convo.add_user(self.transcript)
 
         if self.is_style_command:
-            await self.handle_style_command_feedback()
+            with profiler.measure("style_feedback"):
+                await self.handle_style_command_feedback()
+            profiler.finish()
             return
-            
-        print("🤖 Assistant (streaming)…", flush=True)
 
-        await self.stream_llm_and_tts() # generate and stream LLM response with TTS
+        print("🤖 Assistant (streaming)…", flush=True)
+        with profiler.measure("llm_stream_and_tts"):
+            await self.stream_llm_and_tts()  # generate and stream LLM response with TTS
+        profiler.finish()
 

@@ -45,10 +45,12 @@ Your name is Cora. You are an autonomous AI assistant designed to act as a compa
 
 MAX_TOKENS = 512
 
-TTS_BACKEND = "edge-tts"  # 'pyttsx3' | 'edge-tts' | 'coqui'
-# VOICE_NAME = "tts_models/en/vctk/vits"  # substring filter (pyttsx3) or exact edge-tts voice like 'en-US-JennyNeural' or coqui model name
-VOICE_NAME = "en-US-JennyNeural"  # High-quality neural female voice
+TTS_BACKEND = "piper"  # 'pyttsx3' | 'edge-tts' | 'coqui' | 'piper'
+# For Piper: set VOICE_NAME to the absolute path of a Piper voice .onnx model
+# VOICE_NAME = "en-US-JennyNeural"  # High-quality neural female voice
+# VOICE_NAME = "English (Caribbean)"  # Coqui TTS model name
 
+VOICE_NAME = "/home/robot_admin/dev/chatbot/chatbot/voices/semaine/en_GB-semaine-medium.onnx"
 PRINT_PARTIAL_SENTENCES = True  # Print sentences as they are spoken
 
 ENABLE_SPEAKER_GATE = False

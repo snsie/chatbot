@@ -2,6 +2,7 @@ from .base_speaker import BaseSpeaker
 from .edge_tts_speaker import EdgeTTSSpeaker
 from .coqui_tts_speaker import CoquiTTSSpeaker
 from .pyttsx3_speaker import Pyttsx3Speaker
+from .piper_speaker import PiperSpeaker
 from typing import Optional
 from ..constants import TTS_BACKEND, VOICE_NAME
 
@@ -13,4 +14,7 @@ async def create_speaker() -> BaseSpeaker:
         return EdgeTTSSpeaker(VOICE_NAME)
     elif TTS_BACKEND.lower() == 'coqui':
         return CoquiTTSSpeaker(VOICE_NAME)
+    elif TTS_BACKEND.lower() == 'piper':
+        # VOICE_NAME should be a .onnx path for Piper; use native model rate and slightly faster speech
+        return PiperSpeaker(model_path=VOICE_NAME, use_native_sample_rate=True, length_scale=0.9)
     return Pyttsx3Speaker(VOICE_NAME)
