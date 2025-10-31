@@ -54,6 +54,7 @@ class CoraChatbot:
         self.transcript = ""
         self.assistant_buffer = []
         self.is_style_command = False
+        self.best_name = None
 
     async def ensure_tts_ready(self):
         """
@@ -98,7 +99,7 @@ class CoraChatbot:
             cora_word_found = False
             transcript_no_punct = self.transcript.translate(str.maketrans('', '', string.punctuation))
             words_list = transcript_no_punct.split()
-
+            print('words list',words_list)
             for word in words_list:
                 if word in SIMILAR_NAMES:
                     print(f"Found similar name: {word}")
@@ -135,9 +136,13 @@ class CoraChatbot:
             if self.best_name is None or best_sim < SIM_THRESHOLD:
                 # 1) Ask to enroll
                 await self.speaker.speak("I didn’t recognize your voice. Would you like to register it now?")
-                
+                print('listening now')
                 resp_audio = await asyncio.to_thread(self.detector.record_once)
-                resp_text  = (await asyncio.to_thread(self.stt.transcribe, resp_audio)).strip().lower() if resp_audio is not None else ""
+                resp_text  = await asyncio.to_thread(self.stt.transcribe, resp_audio)
+                print('before heard this',resp_text)
+                resp_text =resp_text.strip().lower() if resp_audio is not None else "" 
+                # resp_text  = (await asyncio.to_thread(self.stt.transcribe, resp_audio)).strip().lower() if resp_audio is not None else ""
+                print('heard this', resp_text)
                 if not any(k in resp_text for k in ["yes", "yeah", "yep", "sure", "ok", "okay"]):
                     await self.speaker.speak("Okay, I won't enroll right now.")
                     return False
@@ -273,7 +278,10 @@ class CoraChatbot:
         
         get_last_text=self.convo.history()[-1] if self.convo.history() else None
         last_content=get_last_text['content'] if get_last_text else "No history"
-        sentence_to_add=f"Please say 'Hey {self.best_name}' before speaking to me. "
+        if self.best_name is not None:
+            sentence_to_add=f"Please say 'Hey {self.best_name}' before speaking to me. "
+        else:
+            sentence_to_add=""
         # sentence_to_add
         self.convo.messages[-1]['content']=sentence_to_add+self.convo.messages[-1]['content']
         print('last_content',self.convo.messages[-1]['content'])
@@ -307,7 +315,7 @@ class CoraChatbot:
             return # no audio caputured
 
         if not await self.transcribe_and_check_wake_word():
-            return # transcription failed or "cora" not found
+            return # transcription failed
 
         if ENABLE_SPEAKER_GATE and self.voice_identifier is not None:
             if not await self.verify_speaker_or_enroll():

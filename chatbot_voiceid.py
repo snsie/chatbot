@@ -743,14 +743,14 @@ async def process_turn(detector: UtteranceDetector, stt: WhisperSTT, convo: Conv
         transcript_no_punct = transcript.translate(str.maketrans('', '', string.punctuation))
         words_list = transcript_no_punct.split()
 
-        for word in words_list:
-            if word in SIMILAR_NAMES:
-                print(f"Found similar name: {word}")
-                cora_word_found = True
-                break
-        if not cora_word_found:
-            print("No wake word detected; ignoring input.")
-            return
+        # for word in words_list:
+        #     if word in SIMILAR_NAMES:
+        #         print(f"Found similar name: {word}")
+        #         cora_word_found = True
+        #         break
+        # if not cora_word_found:
+        #     print("No wake word detected; ignoring input.")
+        #     return
         
     except Exception as e:
         print(f"[STT Error] {e}")
