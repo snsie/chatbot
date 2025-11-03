@@ -68,20 +68,3 @@ SENTENCE_END_CHARS = "\.\!\?…"  # regex set
 SENTENCE_END_REGEX = re.compile(rf"(.+?[{SENTENCE_END_CHARS}](?:[\"'\)\]]*)\s+)", re.DOTALL)
 
 
-# Create the processor
-apm = AudioProcessingModule()
-
-apm.set_stream_format(16000, 1)           # mic stream format
-apm.set_reverse_stream_format(16000, 1)   # playback/ref stream format
-
-# Tune the processing modules.
-# Typical ranges are small ints, e.g. 0=off/low ... 2 or 3=stronger.
-apm.set_aec_level(2)        # echo cancellation aggressiveness
-apm.set_ns_level(2)         # noise suppression strength
-apm.set_agc_level(2)        # automatic gain control mode/strength
-apm.set_agc_target(12)    # target loudness-ish; tweak later
-apm.set_vad_level(2)        # VAD sensitivity (lower = stricter voice detection)
-
-# How much audio output latency (ms) to expect between far-end and mic.
-# Start with 0; you can increase this if you get weird residual echo.
-apm.set_system_delay(0)

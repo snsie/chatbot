@@ -1,6 +1,8 @@
 #for AEC
 reserve_pub.py
 
+## put in AEC_publisher.py
+
 #all constant i defined here WEBRTC
 # AEC
 from reverse_publisher import ReverseAudioPublisher
@@ -23,7 +25,7 @@ apm.set_agc_level(2)        # automatic gain control mode/strength
 apm.set_agc_target(12)    # target loudness-ish; tweak later
 apm.set_vad_level(2)        # VAD sensitivity (lower = stricter voice detection)
 
-## put in constants.py
+## put in utterance detector.py
 
 # How much audio output latency (ms) to expect between far-end and mic.
 # Start with 0; you can increase this if you get weird residual echo.
