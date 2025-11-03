@@ -17,7 +17,7 @@ apm.set_reverse_stream_format(16000, 1)   # playback/ref stream format
 # Tune the processing modules.
 # Typical ranges are small ints, e.g. 0=off/low ... 2 or 3=stronger.
 apm.set_aec_level(2)        # echo cancellation aggressiveness
-apm.set_ns_level(2)         # noise suppression strength
+apm.set_ns_level(3)         # noise suppression strength
 apm.set_agc_level(2)        # automatic gain control mode/strength
 apm.set_agc_target(12)    # target loudness-ish; tweak later
 apm.set_vad_level(2)        # VAD sensitivity (lower = stricter voice detection)
@@ -100,16 +100,31 @@ class UtteranceDetector:
                 # reverse_pub returns a 30 ms np.int16[480]; convert to bytes
                 reverse30 = reverse_pub.get_latest_frame().tobytes()  # 480 * 2 = 960 bytes
 
+                # def chunks_10ms(buf: bytes):
+                #     # 10 ms @ 16 kHz int16 mono = 160 samples = 320 bytes
+                #     for i in range(3):
+                #         start = i * 320
+                #         yield buf[start:start+320]
                 # Helper: slice a 30 ms block into 3 × 10 ms subframes (320 bytes each)
                 def chunks_10ms(buf: bytes):
-                    # 10 ms @ 16 kHz int16 mono = 160 samples = 320 bytes
-                    for i in range(3):
-                        start = i * 320
-                        yield buf[start:start+320]
+                    # Split a FRAME_MS block into 10 ms chunks at SAMPLE_RATE (int16 mono)
+                    chunk_ms = 10
+                    samples_per_chunk = (SAMPLE_RATE * chunk_ms) // 1000
+                    bytes_per_chunk = samples_per_chunk * 2  # 2 bytes per int16 sample
+                    # print('samples_per_chunk:', samples_per_chunk, 'bytes_per_chunk:', bytes_per_chunk)
+                    # Yield only full 10 ms chunks (APM expects exact 10 ms)
+                    for start in range(0, len(buf) - (len(buf) % bytes_per_chunk), bytes_per_chunk):
+                        yield buf[start:start + bytes_per_chunk]
 
+                # 960 bytes comes from: 16_000 Hz * 30 ms = 480 samples; int16 = 2 bytes/sample; mono = 1 channel
+                CHANNELS = 1
+                BYTES_PER_SAMPLE = np.dtype(np.int16).itemsize  # 2 bytes for int16
+
+                expected_len = int(SAMPLE_RATE * (FRAME_MS / 1000)) * BYTES_PER_SAMPLE * CHANNELS
+                # print('Expected length:', expected_len, 'Actual length:', len(reverse30))
                 # If reverse publisher is empty for some reason, use silence
-                if len(reverse30) != 960:
-                    reverse30 = b"\x00" * 960
+                if len(reverse30) != expected_len:
+                    reverse30 = b"\x00" * expected_len
 
                 # 1) AEC: feed reverse 10 ms chunk, then process mic 10 ms chunk — do this 3 times
                 out_parts = []
@@ -120,7 +135,9 @@ class UtteranceDetector:
 
                 # Reassemble processed 30 ms block for VAD + collection
                 proc_bytes = b"".join(out_parts)              # 960 bytes (480 samples)
-
+                frame=proc_bytes
+                # print(f"Processed frame length: {len(proc_bytes)} bytes")
+                # print(f"Original frame length: {len(frame)} bytes")
                 # 3) VAD decision on processed frame
                 is_speech = False
                 try:
@@ -128,7 +145,7 @@ class UtteranceDetector:
                 except Exception:
                     # If VAD fails (rare), treat as silence
                     is_speech = False
-                
+                print(f"VAD decision: {'speech' if is_speech else 'silence'}")
                 # 4) Collect frames based on VAD
                 if not started:
                     if is_speech:

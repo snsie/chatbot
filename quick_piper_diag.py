@@ -8,7 +8,7 @@ import os
 
 out_path = os.path.abspath("piper_diag_out.wav")
 voice = piper.PiperVoice.load(VOICE_NAME)
-syn_cfg = SynthesisConfig(length_scale=0.9, noise_scale=0.667, noise_w_scale=0.8)
+syn_cfg = SynthesisConfig(length_scale=1.1, noise_scale=0.667, noise_w_scale=0.8)
 with wave.open(out_path, "wb") as wav_file:
     voice.synthesize_wav(
         "This is a longer Piper diagnostic test. If you hear this clearly, audio playback is working.",

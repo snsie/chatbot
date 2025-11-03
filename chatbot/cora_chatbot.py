@@ -331,6 +331,7 @@ class CoraChatbot:
         # best_name
         async for sentence in sentence_stream(ollama_stream_chat(self.convo.history(), OLLAMA_MODEL, MAX_TOKENS)):
             self.assistant_buffer.append(sentence)
+            print('sentence',sentence)
             await self.sentences_queue.put(sentence)
             if PRINT_PARTIAL_SENTENCES:
                 print(f"Assistant ↳ {sentence}")

@@ -5,7 +5,7 @@ MONGO_URI = "mongodb://admin:Rob123%21@localhost:27017/admin"
 SAMPLE_RATE = 16000
 FRAME_MS = 30  # ms per frame for capture + VAD
 VAD_AGGRESSIVENESS = 2  # 0-3 (higher = more aggressive speech detection)
-MIN_UTTERANCE_MS = 20  # minimum voiced audio required to accept an utterance
+MIN_UTTERANCE_MS = 5  # minimum voiced audio required to accept an utterance
 TRAILING_SILENCE_MS = 200  # silence to mark end of utterance
 
 WHISPER_MODEL = "medium.en"

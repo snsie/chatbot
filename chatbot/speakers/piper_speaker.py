@@ -17,11 +17,12 @@ class PiperSpeaker(BaseSpeaker):
         self,
         model_path: Optional[str] = None,
         *,
-        length_scale: float = 0.9,
+        length_scale: float = 1.0,
         noise_scale: float = 0.667,
         noise_w: float = 0.8,
         espeak_data_dir: Optional[str] = None,
         use_native_sample_rate: bool = True,
+        use_cuda: Optional[bool] = None,
     ):
         # Resolve model path preference order: explicit arg -> VOICE_NAME (if looks like a path) -> env var
         resolved_model = model_path or (
@@ -39,6 +40,7 @@ class PiperSpeaker(BaseSpeaker):
         self.length_scale = length_scale
         self.noise_scale = noise_scale
         self.noise_w = noise_w
+        self.use_cuda = use_cuda
         # Try to resolve espeak-ng data directory if not provided
         if espeak_data_dir:
             self.espeak_data_dir = espeak_data_dir
@@ -67,10 +69,13 @@ class PiperSpeaker(BaseSpeaker):
 
         # piper.PiperVoice.load accepts file path or file-like; prefer path for simplicity
         try:
+            # Let caller control CUDA usage; default to library's auto if None
+            kwargs = {}
             if self.espeak_data_dir:
-                self._voice = piper.PiperVoice.load(self.model_path, data_dir=self.espeak_data_dir,use_cuda=True)
-            else:
-                self._voice = piper.PiperVoice.load(self.model_path,use_cuda=True)
+                kwargs["data_dir"] = self.espeak_data_dir
+            if self.use_cuda is not None:
+                kwargs["use_cuda"] = self.use_cuda
+            self._voice = piper.PiperVoice.load(self.model_path, **kwargs)
         except TypeError:
             # Fallback for older piper versions without data_dir kwarg
             self._voice = piper.PiperVoice.load(self.model_path)
@@ -112,8 +117,15 @@ class PiperSpeaker(BaseSpeaker):
             # Keep model's native sample rate; ensure mono 16-bit for simpleaudio
             audio_seg = audio_seg.set_channels(1).set_sample_width(2)
         else:
+            # Resample explicitly to the project sample rate if requested
             audio_seg = (
                 audio_seg.set_frame_rate(SAMPLE_RATE).set_channels(1).set_sample_width(2)
+            )
+        # Optional: lightweight debug to verify playback parameters
+        if os.environ.get("DEBUG_AUDIO"):
+            print(
+                f"[PiperSpeaker] frame_rate={audio_seg.frame_rate}Hz, channels=1, bytes_per_sample=2, duration={round(audio_seg.duration_seconds, 3)}s",
+                file=sys.stderr,
             )
         play_obj = sa.play_buffer(
             audio_seg.raw_data,
