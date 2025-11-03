@@ -4,7 +4,10 @@ import webrtcvad
 import numpy as np
 import sounddevice as sd
 import queue
-
+# AEC
+from reverse_publisher import ReverseAudioPublisher
+reverse_pub = ReverseAudioPublisher(sample_rate=16000, frame_ms=30, max_frames=50)
+from webrtc_audio_processing import AudioProcessingModule
 
 class UtteranceDetector:
     """Segments microphone audio into utterances using WebRTC VAD.
@@ -73,13 +76,42 @@ class UtteranceDetector:
                     continue
                 except KeyboardInterrupt:
                     raise
-                    
+
+                # 1) Feed latest speaker frame to AEC
+                # frame: 30 ms mic bytes (960 bytes @ 16k, int16 mono)
+                # reverse_pub returns a 30 ms np.int16[480]; convert to bytes
+                reverse30 = reverse_pub.get_latest_frame().tobytes()  # 480 * 2 = 960 bytes
+
+                # Helper: slice a 30 ms block into 3 × 10 ms subframes (320 bytes each)
+                def chunks_10ms(buf: bytes):
+                    # 10 ms @ 16 kHz int16 mono = 160 samples = 320 bytes
+                    for i in range(3):
+                        start = i * 320
+                        yield buf[start:start+320]
+
+                # If reverse publisher is empty for some reason, use silence
+                if len(reverse30) != 960:
+                    reverse30 = b"\x00" * 960
+
+                # 1) AEC: feed reverse 10 ms chunk, then process mic 10 ms chunk — do this 3 times
+                out_parts = []
+                for rev10, mic10 in zip(chunks_10ms(reverse30), chunks_10ms(frame)):
+                    apm.process_reverse_stream(rev10)         # expects bytes (10 ms)
+                    out10 = apm.process_stream(mic10)         # expects bytes (10 ms), returns bytes
+                    out_parts.append(out10)
+
+                # Reassemble processed 30 ms block for VAD + collection
+                proc_bytes = b"".join(out_parts)              # 960 bytes (480 samples)
+
+                # 3) VAD decision on processed frame
                 is_speech = False
                 try:
                     is_speech = self.vad.is_speech(frame, SAMPLE_RATE)
                 except Exception:
                     # If VAD fails (rare), treat as silence
                     is_speech = False
+                
+                # 4) Collect frames based on VAD
                 if not started:
                     if is_speech:
                         voiced_count += 1
@@ -91,6 +123,7 @@ class UtteranceDetector:
                         voiced_count = 0
                         collected.clear()
                     continue
+                
                 # After started
                 collected.append(frame)
                 if is_speech:
@@ -99,6 +132,7 @@ class UtteranceDetector:
                     silence_count += 1
                     if silence_count >= TRAILING_SILENCE_FRAMES:
                         break  # end of utterance
+
         if not collected:
             return None
         # Remove trailing silence frames for cleaner STT input
