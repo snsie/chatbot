@@ -138,18 +138,22 @@ class CoraChatbot:
         try:
             print("📝 Transcribing…", flush=True)
             self.transcript = await asyncio.to_thread(self.stt.transcribe, self.audio)
-            cora_word_found = False
-            transcript_no_punct = self.transcript.translate(str.maketrans('', '', string.punctuation))
-            words_list = transcript_no_punct.split()
-            print('words list',words_list)
-            for word in words_list:
-                if word in SIMILAR_NAMES:
-                    print(f"Found similar name: {word}")
-                    cora_word_found = True
-                    break
-            if not cora_word_found:
-                print("No wake word detected; ignoring input.")
-                return False
+            # Convert any em-dash (—) symbols to commas in the transcript
+ 
+
+            # cora_word_found = False
+            # transcript_no_punct = self.transcript.translate(str.maketrans('', '', string.punctuation))
+
+            # words_list = transcript_no_punct.split()
+            # print('words list',words_list)
+            # for word in words_list:
+            #     if word in SIMILAR_NAMES:
+            #         print(f"Found similar name: {word}")
+            #         cora_word_found = True
+            #         break
+            # if not cora_word_found:
+            #     print("No wake word detected; ignoring input.")
+            #     return False
             return True
             
         except Exception as e:
@@ -220,7 +224,7 @@ class CoraChatbot:
                     
 
                 # 4) re runs build_enrollments.py to update enrollments.npz and reload into voice_id memory
-                await asyncio.to_thread(subprocess.run, ["python", "build_enrollments.py", "--root", "data", "--out", ENROLL_PATH], check=True)
+                # await asyncio.to_thread(subprocess.run, ["python", "build_enrollments.py", "--root", "data", "--out", ENROLL_PATH], check=True)
 
                 self.voice_identifier.reload_enrollments(ENROLL_PATH)
 
@@ -330,8 +334,12 @@ class CoraChatbot:
 
         # best_name
         async for sentence in sentence_stream(ollama_stream_chat(self.convo.history(), OLLAMA_MODEL, MAX_TOKENS)):
+            if sentence:
+                sentence = sentence.replace("—", ", ")
             self.assistant_buffer.append(sentence)
+            
             print('sentence',sentence)
+            
             await self.sentences_queue.put(sentence)
             if PRINT_PARTIAL_SENTENCES:
                 print(f"Assistant ↳ {sentence}")

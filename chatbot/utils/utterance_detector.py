@@ -7,10 +7,20 @@ import queue
 # AEC
 from chatbot.utils.AEC_publisher import ReverseAudioPublisher
 reverse_pub = ReverseAudioPublisher(sample_rate=16000, frame_ms=30, max_frames=50)
-from webrtc_audio_processing import AudioProcessingModule
-# Create the processor
+# Prefer Rust APM (PyO3) if available for low-latency, fallback to Python APM
+try:
+    import apm_rs  # built via maturin from rust/apm_rs
+    _USE_RUST_APM = True
+except Exception:
+    _USE_RUST_APM = False
+    from webrtc_audio_processing import AudioProcessingModule
+    # Create the processor
 
 import math
+
+# Additional gating to reduce false positives from steady noises (e.g., rain)
+# Frames with RMS below this dBFS are treated as silence regardless of VAD
+MIN_SPEECH_DBFS = -40.0  # tweak between -45 .. -35 to taste
 
 def rms_dbfs(pcm_bytes: bytes) -> float:
     """Return RMS level in dBFS for 16-bit mono PCM."""
@@ -22,25 +32,31 @@ def rms_dbfs(pcm_bytes: bytes) -> float:
     dbfs = 20 * math.log10(rms / 32768.0 + 1e-12)
     return dbfs
 
-apm = AudioProcessingModule()
-
-apm.set_stream_format(16000, 1)           # mic stream format
-apm.set_reverse_stream_format(16000, 1)   # playback/ref stream format
-
-# Tune the processing modules.
-# Typical ranges are small ints, e.g. 0=off/low ... 2 or 3=stronger.
-apm.set_aec_level(2)        # echo cancellation aggressiveness
-apm.set_ns_level(3)         # noise suppression strength
-apm.set_agc_level(2)        # automatic gain control mode/strength
-apm.set_agc_target(0)    # target loudness-ish; tweak later
-# apm.enable_vad(True)        # turn on VAD
-# apm.enable_agc(False)        # turn on AGC
-
-apm.set_vad_level(2)        # VAD sensitivity (lower = stricter voice detection)
-
-# How much audio output latency (ms) to expect between far-end and mic.
-# Start with 0; you can increase this if you get weird residual echo.
-apm.set_system_delay(0)
+if _USE_RUST_APM:
+    print(_USE_RUST_APM)
+    # Initialize Rust APM: 16kHz mono, levels roughly matching prior Python config
+    apm = apm_rs.ApmProcessor(
+        sample_rate=16000,
+        capture_channels=1,
+        render_channels=1,
+        aec_level=2,
+        ns_level=3,
+        agc_level=2,
+        vad_level=2,
+    )
+else:
+    apm = AudioProcessingModule()
+    apm.set_stream_format(16000, 1)           # mic stream format
+    apm.set_reverse_stream_format(16000, 1)   # playback/ref stream format
+    # Tune the processing modules.
+    apm.set_aec_level(2)        # echo cancellation aggressiveness
+    apm.set_ns_level(2)         # noise suppression strength
+    apm.set_agc_level(2)        # automatic gain control mode/strength
+    apm.set_agc_target(0)       # target loudness-ish; tweak later
+    # apm.enable_vad(True)      # optional
+    apm.set_vad_level(2)        # VAD sensitivity (lower = stricter)
+    # System delay hint
+    apm.set_system_delay(0)
 
 
 class UtteranceDetector:
@@ -144,31 +160,38 @@ class UtteranceDetector:
 
                 in_level = rms_dbfs(frame)
 
-                # 1) AEC: feed reverse 10 ms chunk, then process mic 10 ms chunk — do this 3 times
-                out_parts = []
-                for rev10, mic10 in zip(chunks_10ms(reverse30), chunks_10ms(frame)):
-                    apm.process_reverse_stream(rev10)         # expects bytes (10 ms)
-                    out10 = apm.process_stream(mic10)         # expects bytes (10 ms), returns bytes
-                    out_parts.append(out10)
-
-                # Reassemble processed 30 ms block for VAD + collection
-                proc_bytes = b"".join(out_parts)              # 960 bytes (480 samples)
+                if _USE_RUST_APM:
+                    # Rust extension expects raw 30 ms bytes for mic and reverse
+                    proc_bytes = apm.process_stream_30ms(frame, reverse30)
+                else:
+                    # 1) AEC: feed reverse 10 ms chunk, then process mic 10 ms chunk — do this 3 times
+                    out_parts = []
+                    for rev10, mic10 in zip(chunks_10ms(reverse30), chunks_10ms(frame)):
+                        apm.process_reverse_stream(rev10)         # expects bytes (10 ms)
+                        out10 = apm.process_stream(mic10)         # expects bytes (10 ms), returns bytes
+                        out_parts.append(out10)
+                    # Reassemble processed 30 ms block for VAD + collection
+                    proc_bytes = b"".join(out_parts)              # 960 bytes (480 samples)
                 out_level = rms_dbfs(proc_bytes)
-                print(f"APM levels: in={in_level:.1f} dBFS, out={out_level:.1f} dBFS")
-                print('difference:', out_level - in_level)
-
-                frame=proc_bytes
-                
-                # print(f"Processed frame length: {len(proc_bytes)} bytes")
-                # print(f"Original frame length: {len(frame)} bytes")
-                # 3) VAD decision on processed frame
-                is_speech = False
-                try:
-                    is_speech = self.vad.is_speech(frame, SAMPLE_RATE)
-                except Exception:
-                    # If VAD fails (rare), treat as silence
+                # print(f"APM levels: in={in_level:.1f} dBFS, out={out_level:.1f} dBFS")
+                # Treat very-quiet output as silence to avoid AGC/NS artifacts
+                if out_level < MIN_SPEECH_DBFS:
                     is_speech = False
-                print(f"VAD decision: {'speech' if is_speech else 'silence'}")
+                else:
+                    # Vote VAD over 3×10ms subframes to reduce false positives
+                    votes = 0
+                    for sub10 in chunks_10ms(proc_bytes):
+                        try:
+                            if self.vad.is_speech(sub10, SAMPLE_RATE):
+                                votes += 1
+                        except Exception:
+                            # ignore malformed subframes
+                            pass
+                    # print('votes',votes)
+                    is_speech = votes >= 2  # require at least 2/3 subframes to be speech
+                # print(f"VAD decision: {'speech' if is_speech else 'silence'} (level={out_level:.1f} dBFS)")
+
+                frame = proc_bytes
                 # 4) Collect frames based on VAD
                 if not started:
                     if is_speech:

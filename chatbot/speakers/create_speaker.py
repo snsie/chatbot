@@ -15,6 +15,8 @@ async def create_speaker() -> BaseSpeaker:
     elif TTS_BACKEND.lower() == 'coqui':
         return CoquiTTSSpeaker(VOICE_NAME)
     elif TTS_BACKEND.lower() == 'piper':
-        # VOICE_NAME should be a .onnx path for Piper; use native model rate and slightly faster speech
-        return PiperSpeaker(model_path=VOICE_NAME, use_native_sample_rate=True, length_scale=0.4)
+        # VOICE_NAME should be a .onnx path for Piper; use native model rate and natural speaking speed
+        # Note: Setting a very small length_scale (< 1.0) makes speech faster and can raise perceived pitch.
+        # Use length_scale=1.0 for natural prosody. Adjust slightly (e.g., 0.9–1.1) if needed.
+        return PiperSpeaker(model_path=VOICE_NAME, use_native_sample_rate=False, length_scale=1)
     return Pyttsx3Speaker(VOICE_NAME)

@@ -18,10 +18,10 @@ class PiperSpeaker(BaseSpeaker):
         model_path: Optional[str] = None,
         *,
         length_scale: float = 1.0,
-        noise_scale: float = 0.667,
-        noise_w: float = 0.8,
+        noise_scale: float = 0.0,
+        noise_w: float = 0,
         espeak_data_dir: Optional[str] = None,
-        use_native_sample_rate: bool = True,
+        use_native_sample_rate: bool = False,
         use_cuda: Optional[bool] = None,
     ):
         # Resolve model path preference order: explicit arg -> VOICE_NAME (if looks like a path) -> env var
@@ -37,9 +37,9 @@ class PiperSpeaker(BaseSpeaker):
             raise ImportError("Piper model path is required")
 
         self.model_path = resolved_model
-        self.length_scale = length_scale
-        self.noise_scale = noise_scale
-        self.noise_w = noise_w
+        # self.length_scale = length_scale
+        # self.noise_scale = noise_scale
+        # self.noise_w = noise_w
         self.use_cuda = use_cuda
         # Try to resolve espeak-ng data directory if not provided
         if espeak_data_dir:
@@ -91,16 +91,16 @@ class PiperSpeaker(BaseSpeaker):
         import wave
         from piper.config import SynthesisConfig
 
-        syn_cfg = SynthesisConfig(
-            length_scale=self.length_scale,
-            noise_scale=self.noise_scale,
-            noise_w_scale=self.noise_w,
-        )
+        # syn_cfg = SynthesisConfig(
+        #     length_scale=self.length_scale,
+        #     noise_scale=self.noise_scale,
+        #     noise_w_scale=self.noise_w,
+        # )
 
         buf = io.BytesIO()
         with wave.open(buf, 'wb') as wav_file:
             # set_wav_format=True will set correct WAV header/format
-            self._voice.synthesize_wav(sentence, wav_file, syn_config=syn_cfg, set_wav_format=True)
+            self._voice.synthesize_wav(sentence, wav_file,  set_wav_format=True)
 
         data = buf.getvalue()
         if not data:

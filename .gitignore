@@ -3,3 +3,8 @@ data/
 __pycache__/
 .env
 enrollments.npz
+
+# Rust files
+target/
+**/*.rs.bk
+**/*.pdb
