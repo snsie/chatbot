@@ -9,6 +9,19 @@ from chatbot.utils.AEC_publisher import ReverseAudioPublisher
 reverse_pub = ReverseAudioPublisher(sample_rate=16000, frame_ms=30, max_frames=50)
 from webrtc_audio_processing import AudioProcessingModule
 # Create the processor
+
+import math
+
+def rms_dbfs(pcm_bytes: bytes) -> float:
+    """Return RMS level in dBFS for 16-bit mono PCM."""
+    if not pcm_bytes:
+        return -120.0
+    pcm = np.frombuffer(pcm_bytes, dtype=np.int16).astype(np.float32)
+    rms = np.sqrt(np.mean(pcm ** 2) + 1e-12)
+    # 16-bit full scale is 32768
+    dbfs = 20 * math.log10(rms / 32768.0 + 1e-12)
+    return dbfs
+
 apm = AudioProcessingModule()
 
 apm.set_stream_format(16000, 1)           # mic stream format
@@ -19,7 +32,10 @@ apm.set_reverse_stream_format(16000, 1)   # playback/ref stream format
 apm.set_aec_level(2)        # echo cancellation aggressiveness
 apm.set_ns_level(3)         # noise suppression strength
 apm.set_agc_level(2)        # automatic gain control mode/strength
-apm.set_agc_target(12)    # target loudness-ish; tweak later
+apm.set_agc_target(0)    # target loudness-ish; tweak later
+# apm.enable_vad(True)        # turn on VAD
+# apm.enable_agc(False)        # turn on AGC
+
 apm.set_vad_level(2)        # VAD sensitivity (lower = stricter voice detection)
 
 # How much audio output latency (ms) to expect between far-end and mic.
@@ -126,6 +142,8 @@ class UtteranceDetector:
                 if len(reverse30) != expected_len:
                     reverse30 = b"\x00" * expected_len
 
+                in_level = rms_dbfs(frame)
+
                 # 1) AEC: feed reverse 10 ms chunk, then process mic 10 ms chunk — do this 3 times
                 out_parts = []
                 for rev10, mic10 in zip(chunks_10ms(reverse30), chunks_10ms(frame)):
@@ -135,7 +153,12 @@ class UtteranceDetector:
 
                 # Reassemble processed 30 ms block for VAD + collection
                 proc_bytes = b"".join(out_parts)              # 960 bytes (480 samples)
+                out_level = rms_dbfs(proc_bytes)
+                print(f"APM levels: in={in_level:.1f} dBFS, out={out_level:.1f} dBFS")
+                print('difference:', out_level - in_level)
+
                 frame=proc_bytes
+                
                 # print(f"Processed frame length: {len(proc_bytes)} bytes")
                 # print(f"Original frame length: {len(frame)} bytes")
                 # 3) VAD decision on processed frame
