@@ -11,8 +11,9 @@ TRAILING_SILENCE_MS = 250  # silence to mark end of utterance (lower = faster en
 WHISPER_MODEL = "medium.en"
 WHISPER_COMPUTE = "cuda"  # 'auto' | 'cpu' | 'cuda'
 
-OLLAMA_MODEL = "gpt-oss:20b"
-# OLLAMA_MODEL="llama2:latest"
+# OLLAMA_MODEL = "gpt-oss:20b"
+# OLLAMA_MODEL = "deepseek-r1:latest"
+OLLAMA_MODEL="llama2:latest"
 # - Use a friendly, conversational tone
 
 

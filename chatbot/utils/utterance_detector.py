@@ -50,8 +50,8 @@ else:
     apm.set_reverse_stream_format(16000, 1)   # playback/ref stream format
     # Tune the processing modules.
     apm.set_aec_level(2)        # echo cancellation aggressiveness
-    apm.set_ns_level(2)         # noise suppression strength
-    apm.set_agc_level(2)        # automatic gain control mode/strength
+    apm.set_ns_level(0)         # noise suppression strength
+    apm.set_agc_level(0)        # automatic gain control mode/strength
     apm.set_agc_target(0)       # target loudness-ish; tweak later
     # apm.enable_vad(True)      # optional
     apm.set_vad_level(2)        # VAD sensitivity (lower = stricter)
@@ -174,6 +174,7 @@ class UtteranceDetector:
                     proc_bytes = b"".join(out_parts)              # 960 bytes (480 samples)
                 out_level = rms_dbfs(proc_bytes)
                 # print(f"APM levels: in={in_level:.1f} dBFS, out={out_level:.1f} dBFS")
+                # print( 'in-out', in_level-out_level)
                 # Treat very-quiet output as silence to avoid AGC/NS artifacts
                 if out_level < MIN_SPEECH_DBFS:
                     is_speech = False

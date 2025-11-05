@@ -78,7 +78,7 @@ class PiperSpeaker(BaseSpeaker):
             self._voice = piper.PiperVoice.load(self.model_path, **kwargs)
         except TypeError:
             # Fallback for older piper versions without data_dir kwarg
-            self._voice = piper.PiperVoice.load(self.model_path)
+            self._voice = piper.PiperVoice.load(self.model_path,use_cuda=True)
 
     async def speak(self, sentence: str):
         from pydub import AudioSegment
