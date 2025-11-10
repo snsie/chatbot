@@ -76,7 +76,7 @@ MIN_UTTERANCE_MS = 300  # minimum voiced audio required to accept an utterance
 TRAILING_SILENCE_MS = 200  # silence to mark end of utterance
 
 WHISPER_MODEL = "small.en"
-WHISPER_COMPUTE = "cuda"  # 'auto' | 'cpu' | 'cuda'
+WHISPER_COMPUTE = "auto"  # 'auto' | 'cpu' | 'cuda' - auto will fallback to CPU if CUDA fails
 
 OLLAMA_MODEL = "gpt-oss:20b"
 
@@ -105,7 +105,7 @@ Your name is Cora. You are an autonomous AI assistant designed to act as a compa
 
 MAX_TOKENS = 512
 
-TTS_BACKEND = "edge-tts"  # 'pyttsx3' | 'edge-tts' | 'coqui'
+TTS_BACKEND = "pyttsx3"  # 'pyttsx3' | 'edge-tts' | 'coqui' - using pyttsx3 to avoid FFmpeg dependency
 # VOICE_NAME = "tts_models/en/vctk/vits"  # substring filter (pyttsx3) or exact edge-tts voice like 'en-US-JennyNeural' or coqui model name
 VOICE_NAME = "en-US-MichelleNeural"  # Alternative: en-US-GuyNeural, en-GB-SoniaNeural, en-AU-NatashaNeural
 # VOICE_NAME = "en-GB-SoniaNeural"
@@ -245,14 +245,32 @@ class WhisperSTT:
 
     def _select_device(self, compute: str):
         if compute == 'auto':
-            # Try GPU (cuda) first
+            # Try GPU (cuda) first, but fallback gracefully
             try:
-                import torch  # noqa: F401
-                return 'cuda', 'float16'
-            except Exception:
+                import torch
+                if torch.cuda.is_available():
+                    # Test CUDA initialization
+                    torch.cuda.init()
+                    print("[Whisper] Using CUDA GPU acceleration")
+                    return 'cuda', 'float16'
+                else:
+                    print("[Whisper] CUDA not available, using CPU")
+                    return 'cpu', 'int8'
+            except Exception as e:
+                print(f"[Whisper] CUDA failed ({e}), falling back to CPU")
                 return 'cpu', 'int8'
         if compute == 'cuda':
-            return 'cuda', 'float16'
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    torch.cuda.init()
+                    return 'cuda', 'float16'
+                else:
+                    print("[Whisper] CUDA requested but not available, using CPU")
+                    return 'cpu', 'int8'
+            except Exception as e:
+                print(f"[Whisper] CUDA initialization failed ({e}), using CPU")
+                return 'cpu', 'int8'
         return 'cpu', 'int8'
 
     def transcribe(self, audio: np.ndarray) -> str:
@@ -378,6 +396,10 @@ class EdgeTTSSpeaker(BaseSpeaker):
             import edge_tts  # noqa: F401
             import pydub  # noqa: F401
             import simpleaudio  # noqa: F401
+            # Suppress FFmpeg warnings during initialization
+            import warnings
+            warnings.filterwarnings("ignore", category=RuntimeWarning, module="pydub")
+            print("[EdgeTTS] Initialized (FFmpeg warnings suppressed)")
         except ImportError as e:
             print("[EdgeTTSSpeaker] Missing packages. Install: pip install edge-tts pydub simpleaudio", file=sys.stderr)
             raise
