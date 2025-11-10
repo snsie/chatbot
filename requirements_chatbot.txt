@@ -1,0 +1,39 @@
+# Core chatbot dependencies
+# Speech recognition and processing
+faster-whisper==1.2.0
+sounddevice==0.5.2
+webrtcvad==2.0.10
+numpy
+
+# LLM integration
+ollama==0.5.3
+
+# Text-to-speech
+pyttsx3==2.99
+edge-tts==7.2.1
+
+# Audio processing and utilities
+pydub==0.25.1
+simpleaudio==1.0.4
+soundfile==0.13.1
+
+# Optional: Neural TTS (Coqui TTS)
+TTS==0.22.0
+torch==2.8.0
+torchaudio==2.8.0
+
+# Utilities
+tiktoken==0.11.0
+requests==2.32.5
+aiohttp==3.12.15
+
+# Data processing
+pandas==1.5.3
+scipy==1.11.4
+
+# Voice identification (if needed)
+scikit-learn==1.7.1
+librosa==0.10.0
+
+# Development and debugging
+tqdm==4.67.1
