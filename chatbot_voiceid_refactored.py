@@ -7,13 +7,6 @@ import asyncio
 # from chatbot.voice_id.get_voice_identifier import get_voice_identifier
 
 # Project-wide constants for models, thresholds, and flags
-from chatbot.constants import (SAMPLE_RATE, FRAME_MS, VAD_AGGRESSIVENESS, MIN_UTTERANCE_MS, TRAILING_SILENCE_MS,
-                              WHISPER_MODEL, WHISPER_COMPUTE,
-                              OLLAMA_MODEL, MAX_TOKENS,
-                              TTS_BACKEND, VOICE_NAME,
-                              PRINT_PARTIAL_SENTENCES, SYSTEM_PROMPT, ENROLL_PATH, ENABLE_SPEAKER_GATE, 
-                              SIMILAR_NAMES, SIM_THRESHOLD
-)
 
 # Platform utils (Windows-specific event loop setup)
 from chatbot.utils import setup_windows_event_loop
@@ -22,6 +15,7 @@ USE_SEPARATION = True  # flip on/off easily
 
 # High-level orchestrator for a single voice turn
 from chatbot.cora_chatbot import CoraChatbot
+
 
 # =============================
 # Main Entry Point

@@ -1,0 +1,25 @@
+[package]
+name = "apm_rs"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "PyO3 wrapper around WebRTC AudioProcessing (AEC/NS/AGC/VAD) for real-time frame processing"
+readme = "README.md"
+
+[lib]
+name = "apm_rs"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.21", features = ["extension-module", "abi3-py38"] }
+# Enable "bundled" to build the C++ lib if system pkg-config can't find it
+webrtc-audio-processing = { version = "0.5", features = ["bundled"] }
+thiserror = "1"
+
+[features]
+default = []
+
+[package.metadata.maturin]
+# Manylinux policy can be tuned; default is fine for local dev
+# Bindings are abi3 for Python >=3.8
+

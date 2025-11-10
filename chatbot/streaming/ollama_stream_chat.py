@@ -5,7 +5,7 @@ import ollama  # pip install ollama
 # =============================
 # Ollama Streaming
 # =============================
-async def ollama_stream_chat(conversation: List[dict], model: str, max_tokens: int) -> AsyncGenerator[str, None]:
+async def ollama_stream_chat(conversation: List[dict], model: str, max_tokens: int, keep_alive: int | str = 300) -> AsyncGenerator[str, None]:
     """Async generator yielding text chunks from Ollama chat streaming.
 
     conversation: list of {'role': 'system'|'user'|'assistant', 'content': str}
@@ -16,7 +16,13 @@ async def ollama_stream_chat(conversation: List[dict], model: str, max_tokens: i
     def worker():
         try:
             # streaming=True returns incremental responses
-            for part in ollama.chat(model=model, messages=conversation, stream=True, options={"num_predict": max_tokens}):
+            for part in ollama.chat(
+                model=model,
+                messages=conversation,
+                stream=True,
+                options={"num_predict": max_tokens},
+                keep_alive=keep_alive,
+            ):
                 try:
                     msg = part.get('message', {})
                     content = msg.get('content')
