@@ -1,0 +1,15 @@
+->
+|  [Cora enters patient room]
+|  [Cora engages with patient]
+|  ?
+|  |  ->
+|  |  |  (Condition: Does patient want to interact?)
+|  |  |  [Cora interact with patient]
+|  |  ->
+|  |  |  [Cora retreats to corner of the room]
+
+;; notes:
+;; actions return (running || success)
+;; conditions return (success || failure)
+
+

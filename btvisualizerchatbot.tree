@@ -1,0 +1,15 @@
+->
+|  [Cora listens for  name trigger]
+|  ?
+|  |  ->
+|  |  |  (Condition: Does Cora recognize voice?)
+|  |  |  [Identify patient]
+|  |  ->
+|  |  |  [Register patient]
+|  [Generate and stream response]
+
+;; notes:
+;; actions return (running || success)
+;; conditions return (success || failure)
+
+
