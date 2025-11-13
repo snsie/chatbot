@@ -1,0 +1,20 @@
+high level:
+cora go into room
+cora engage with patient
+does patient want to talk/have questions?
+  if yes, cora talk to patient
+  if no, cora go to the corner of the room
+
+chatbot low level:
+cora listen for name trigger
+recognize voice?
+  if no, register
+  if yes, continue
+generate and stream response
+
+next steps:
+- create webapp for more control over visualizer
+  - vite, reactjs, etc.
+
+- don't implement behavior tree with current code --> still being modified
+

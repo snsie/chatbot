@@ -1,0 +1,208 @@
+if ENABLE_SPEAKER_GATE and voice_identifier is not None:
+        try:
+            best_name, best_sim = voice_identifier.identify_from_array(audio, 16000)
+            if best_name is None:
+                await speaker.speak("I don't have any enrolled voices yet.")
+                return
+            if best_sim < SIM_THRESHOLD:
+                print(f"[Gate] ❌ Deny: best={best_name}, sim={best_sim:.3f}")
+                await speaker.speak("Sorry, I didn’t recognize your voice. Please try again.")
+                return
+            print(f"[Gate] ✅ Allow: {best_name} (sim={best_sim:.3f})")
+        except Exception as e:
+            print(f"[Gate Error] {e}")
+            await speaker.speak("Voice check failed. Please try again.")
+            return
+
+
+
+line 707 in chatbot_voice
+# Embed for immediate enrollment
+                    emb = voice_identifier.embed_from_array(clip, 16000)
+                    embs.append(emb)
+taken out cause embed from py file later in script
+
+
+
+
+def in uderance detector
+line 227
+def record_once(self) -> Optional[np.ndarray]:
+        """Blocking capture of a single utterance. Returns float32 waveform or None."""
+        if self._is_muted:
+            return None
+            
+        q: 'queue.Queue[bytes]' = queue.Queue()
+        started = False
+        voiced_count = 0
+        silence_count = 0
+        collected: List[bytes] = []
+        overflow_counter = 0
+
+        def callback(indata, frames, time_info, status):
+            nonlocal overflow_counter
+            if status.input_overflow:
+                overflow_counter += 1
+            if not self._is_muted:  # Only collect if not muted
+                q.put(bytes(indata))
+
+        self._stream = sd.RawInputStream(
+            samplerate=SAMPLE_RATE,
+            blocksize=FRAME_SAMPLES,
+            channels=1,
+            dtype='int16',
+            callback=callback,
+        )
+
+        with self._stream:
+            while True:
+                if self._is_muted:
+                    return None
+                    
+                try:
+                    frame = q.get(timeout=0.1)
+                except queue.Empty:
+                    continue
+                except KeyboardInterrupt:
+                    raise
+                    
+                is_speech = False
+                try:
+                    is_speech = self.vad.is_speech(frame, SAMPLE_RATE)
+                except Exception:
+                    # If VAD fails (rare), treat as silence
+                    is_speech = False
+                if not started:
+                    if is_speech:
+                        voiced_count += 1
+                        collected.append(frame)
+                        if voiced_count >= MIN_VOICED_FRAMES:
+                            started = True
+                    else:
+                        # Reset (noise or short blips)
+                        voiced_count = 0
+                        collected.clear()
+                    continue
+                # After started
+                collected.append(frame)
+                if is_speech:
+                    silence_count = 0
+                else:
+                    silence_count += 1
+                    if silence_count >= TRAILING_SILENCE_FRAMES:
+                        break  # end of utterance
+        if not collected:
+            return None
+        # Remove trailing silence frames for cleaner STT input
+        if silence_count:
+            collected = collected[:-silence_count] or collected
+        if len(collected) < MIN_VOICED_FRAMES:
+            return None  # Too short / discard
+        pcm = b''.join(collected)
+        audio = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
+        return audio
+
+
+
+VAD adjustments
+# --- VAD refinements ---
+import collections
+PRE_ROLL_MS = 150            # keep ~150 ms of audio BEFORE VAD says "start"
+ENERGY_DBFS_FLOOR = -45.0    # discard segments quieter than this (dBFS)
+
+
+ def record_once(self) -> Optional[np.ndarray]:
+        if self._is_muted:
+            return None
+
+        q: "queue.Queue[bytes]" = queue.Queue()
+
+        def callback(indata, frames, time_info, status):
+            if not self._is_muted:
+                q.put(bytes(indata))
+
+        self._stream = sd.RawInputStream(
+            samplerate=SAMPLE_RATE,
+            blocksize=FRAME_SAMPLES,
+            channels=1,
+            dtype="int16",
+            callback=callback,
+        )
+
+        # New: pre-roll buffer (keeps the last PRE_ROLL_MS of frames)
+        pre_roll_frames = max(1, math.ceil(PRE_ROLL_MS / FRAME_MS))
+        pre_roll = collections.deque(maxlen=pre_roll_frames)
+        silence_count = 0
+        started = False
+        voiced_count = 0
+        silence_count = 0
+        collected: List[bytes] = []
+
+        with self._stream:
+            while True:
+                try:
+                    frame = q.get(timeout=0.2)
+                except queue.Empty:
+                    continue
+
+                # Always update pre-roll while we're idle
+                pre_roll.append(frame)
+
+                # VAD decision on this 30 ms frame
+                try:
+                    is_speech = self.vad.is_speech(frame, SAMPLE_RATE)
+                except Exception:
+                    is_speech = False
+
+                if not started:
+                    if is_speech:
+                        voiced_count += 1
+                        if voiced_count >= MIN_VOICED_FRAMES:
+                            started = True
+                            # New: prepend pre-roll so we don't chop off initial consonants
+                            collected.extend(list(pre_roll))
+                            silence_count = 0
+                    else:
+                        voiced_count = 0
+                        # Don't touch collected here; we only collect after start
+                    continue
+
+                # After started: collect every frame
+                collected.append(frame)
+
+                if is_speech:
+                    silence_count = 0
+                else:
+                    silence_count += 1
+                    if silence_count >= TRAILING_SILENCE_FRAMES:
+                        break  # end of utterance
+
+        if not collected:
+            return None
+
+        # Trim trailing silence frames (optional but helpful for STT/ID)
+        if silence_count:
+            collected = collected[:-silence_count] or collected
+
+        # Too short? (keeps your original behavior)
+        if len(collected) < MIN_VOICED_FRAMES:
+            return None
+
+        # New: energy floor check in dBFS; discard very quiet segments
+        pcm = b"".join(collected)
+        x = np.frombuffer(pcm, dtype=np.int16).astype(np.float32)
+        rms = float(np.sqrt(np.mean(x * x)) + 1e-9)
+        dbfs = 20.0 * math.log10(rms / 32768.0 + 1e-12)
+        if dbfs < ENERGY_DBFS_FLOOR:
+            # Too quiet to be useful in a crowd: ignore
+            print(f"[VAD] Discarded (level {dbfs:.1f} dBFS < {ENERGY_DBFS_FLOOR} dBFS)")
+            return None
+
+        # Convert to float32 mono [-1, +1] for downstream
+        audio = x / 32768.0
+        print(f"[VAD] Segment: {len(audio)/SAMPLE_RATE:.2f}s, level {dbfs:.1f} dBFS")
+        return audio
+
+
+
+Start each reply by addressing the user by their verified name when provided. Their name is stored under (best_name) variable.

@@ -1,0 +1,42 @@
+# sepformer_separate.py
+import torch
+import soundfile as sf
+import numpy as np
+from speechbrain.inference.separation import SepformerSeparation as Separator
+
+# ---- config ----
+MIX_WAV = "mixture.wav"      # input: single-channel 16 kHz (recommended)
+OUT_A   = "speaker1.wav"
+OUT_B   = "speaker2.wav"
+DEVICE  = "cuda" if torch.cuda.is_available() else "cpu"
+FP16    = (DEVICE == "cuda")  # use half precision on GPU
+
+def main():
+    # Load pretrained SepFormer (WSJ0-2mix)
+    sep = Separator.from_hparams(
+        source="speechbrain/sepformer-wsj02mix",
+        savedir="pretrained_sepformer"
+    )
+    # Move to device
+    sep.separation_model.to(DEVICE)
+    sep.separation_model.eval()
+
+    # Separate file -> tensor [num_spk, time]
+    with torch.inference_mode():
+        if FP16:
+            with torch.autocast(device_type="cuda", dtype=torch.float16):
+                est_sources = sep.separate_file(path=MIX_WAV)  # returns torch.Tensor
+        else:
+            est_sources = sep.separate_file(path=MIX_WAV)
+
+    # Convert to numpy and save two stems
+    est = est_sources.cpu().numpy()  # shape: [2, T]
+    # Normalize a bit to avoid clipping
+    est = est / (np.max(np.abs(est)) + 1e-8)
+
+    sf.write(OUT_A, est[0], 16000)
+    sf.write(OUT_B, est[1], 16000)
+    print(f"Saved separated files:\n - {OUT_A}\n - {OUT_B}")
+
+if __name__ == "__main__":
+    main()
