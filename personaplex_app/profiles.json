@@ -1,0 +1,7 @@
+[
+  {
+    "name": "assistant",
+    "voice_prompt": "assets/voice_prompts/NATF2.pt",
+    "text_prompt": "personaplex_app/prompts/assistant.txt"
+  }
+]
