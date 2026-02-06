@@ -1,0 +1,1000 @@
+  980  # Typically you want:
+  981  # storage.dbPath: /var/lib/mongodb
+  982  # systemLog.path: /var/log/mongodb/mongod.log
+  983  # 5) Start it back up
+  984  sudo systemctl start mongod
+  985  sudo systemctl status mongod --no-pager
+  986  mongosh "mongodb://admin@localhost:27017/admin" --password
+  987  sudo systemctl enable mongod
+  988  mongosh "mongodb://admin@localhost:27017/admin" --password
+  989  git branch
+  990  python streaming_voice_chatbot_connect_mongo.py 
+  991  git branch
+  992  git add .
+  993  git checkout voice_id
+  994  git branch
+  995  python chatbot_voiceid.py 
+  996  python build_enrollments.py 
+  997  python build_enrollments.py --root data --out
+  998  python chatbot_voiceid.py 
+  999  git checkout mongo 
+ 1000  git add . -A
+ 1001  git add -A
+ 1002  git commit -m "added prelim"
+ 1003  git push
+ 1004  git checkout mongo
+ 1005  git add -A
+ 1006  git commit -m "prelim"
+ 1007  git push
+ 1008  git push --set-upstream origin mongo
+ 1009  git checkout voice_id 
+ 1010  sudo systemctl status mongod
+ 1011  sudo mkdir -p /var/log/mongodb
+ 1012  sudo touch /var/log/mongodb/mongod.log
+ 1013  sudo chown -R mongodb:mongodb /var/log/mongodb
+ 1014  sudo chmod 755 /var/log/mongodb
+ 1015  sudo chmod 640 /var/log/mongodb/mongod.log
+ 1016  sudo systemctl restart mongod
+ 1017  sudo systemctl status mongod --no-pager
+ 1018  mongosh "mongodb://admin@localhost:27017/admin" --password
+ 1019  python chatbot_voiceid.py 
+ 1020  git add -A
+ 1021  git commit -m "worked on voice registration w/ MongDB"
+ 1022  git push
+ 1023  git branch
+ 1024  git checkout mongo
+ 1025  ls
+ 1026  cd dev/
+ 1027  ls
+ 1028  cd voice_id/
+ 1029  code . -r
+ 1030  cd ..
+ 1031  pwd
+ 1032  ls
+ 1033  cd dev
+ 1034  ls
+ 1035  cd conversation-storage-app/
+ 1036  ls
+ 1037  cd ..
+ 1038  cd chatbot/
+ 1039  ls
+ 1040  cd ~
+ 1041  code . -r
+ 1042  ip addr
+ 1043  git branch
+ 1044  git checkout voice_id
+ 1045  python voice_id
+ 1046  source .venv/bin/activate
+ 1047  python voice_id
+ 1048  python chatbot_voiceid.py 
+ 1049  gti branch
+ 1050  git brnach
+ 1051  git branch
+ 1052  ls
+ 1053  git checkout
+ 1054  git branch
+ 1055  git checkout
+ 1056  ls
+ 1057  cd ..
+ 1058  ls
+ 1059  pwd
+ 1060  git checkout
+ 1061  git status
+ 1062  cd /dev
+ 1063  git status
+ 1064  cd chatbot
+ 1065  cd /chatbot
+ 1066  ls
+ 1067  cd .
+ 1068  cd ~
+ 1069  ls
+ 1070  pwd
+ 1071  cd dev
+ 1072  cd /chatbot
+ 1073  ls
+ 1074  cd chatbot/
+ 1075  ls
+ 1076  git status
+ 1077  git add chatbot_voiceid.py 
+ 1078  git commit -m 'added pydantic library, created pydantic class, added filepath attribute to people collection in mongodb'
+ 1079  git branch
+ 1080  git push
+ 1081  source .venv/bin/activate
+ 1082  python chatbot_voiceid.py
+ 1083  python build_enrollments.py
+ 1084  python build_enrollments.py --root data --out
+ 1085  python build_enrollments.py --root data --out enrollments.npz
+ 1086  python chatbot_voiceid.py
+ 1087  python build_enrollments.py --root data --out enrollments.npz
+ 1088  python chatbot_voiceid.py
+ 1089  python build_enrollments.py --root data --out enrollments.npz
+ 1090  python chatbot_voiceid.py
+ 1091  exit
+ 1092  cd /home/robot_admin/dev/chatbot && git status
+ 1093  git status
+ 1094  print(utcnow)
+ 1095  print("hellO")
+ 1096  python
+ 1097  cd /.venv
+ 1098  cd .venv/bin
+ 1099  ls
+ 1100  cd activate
+ 1101  cd ..
+ 1102  .venv/bin/activate
+ 1103  source .venv/bin/activate
+ 1104  python build_enrollments.py --root data --out enrollments.npz
+ 1105  python chatbot_voiceid.py 
+ 1106  python build_enrollments.py --root data --out enrollments.npz
+ 1107  python chatbot_voiceid.py 
+ 1108  python build_enrollments.py --root data --out enrollments.npz
+ 1109  python chatbot_voiceid.py 
+ 1110  python build_enrollments.py --root data --out enrollments.npz
+ 1111  python chatbot_voiceid.py 
+ 1112  git add chatbot_voiceid.py
+ 1113  git status
+ 1114  git commit -m 'fixed errors regarding pydantic data types'
+ 1115  git push
+ 1116  git pull
+ 1117  git reset
+ 1118  git pull
+ 1119  git reset
+ 1120  git pull
+ 1121  /bin/python
+ 1122  git status
+ 1123  git pull
+ 1124  /bin/python /home/robot_admin/dev/chatbot/build_enrollments.py
+ 1125  /bin/python /home/robot_admin/dev/chatbot/chatbot_voiceid.py
+ 1126  cd chatbot/
+ 1127  code . -r
+ 1128  git pull
+ 1129  git add -A
+ 1130  git status
+ 1131  git reset
+ 1132  git status
+ 1133  git add -A
+ 1134  git status
+ 1135  git commit -m "pydantic edits"
+ 1136  git push
+ 1137  git branch
+ 1138  python test_diar.py
+ 1139  git add .
+ 1140  git commit -m "voice sep"
+ 1141  git push
+ 1142  python test_diar.py
+ 1143  python build_enrollments.py  --root data --out enrollments.npz
+ 1144  python test_diar.py
+ 1145  git add . 
+ 1146  git commit -m "working on voice separ"
+ 1147  git push
+ 1148  git pull
+ 1149  git branch
+ 1150  git push
+ 1151  git checkout main
+ 1152  git branch
+ 1153  git checkout voice_id 
+ 1154  python test_diar.py
+ 1155  source .venv/bin/activate
+ 1156  python test_diar.py
+ 1157  python chatbot_voiceid.py 
+ 1158  git add .
+ 1159  git commmit -m "voice separation and user addressing"
+ 1160  git commit -m "voice separation and user addressing"
+ 1161  git push
+ 1162  git checkout main
+ 1163  sudo systemctl restart ollama
+ 1164  sudo apt update
+ 1165  ollama ps
+ 1166  sudo systemctl restart ollama
+ 1167  python streaming_voice_chatbot.py 
+ 1168  git status
+ 1169  git add -A
+ 1170  git status
+ 1171  git branch
+ 1172  bit checkout voice_id.py 
+ 1173  git checkout voice_id
+ 1174  python streaming_voice_chatbot.py 
+ 1175  ollama ps
+ 1176  python streaming_voice_chatbot.py 
+ 1177  git checkout main
+ 1178  git status
+ 1179  python old_streaming_voice_chatbot.py 
+ 1180  sudo apt update
+ 1181  sudo apt install -f
+ 1182  sudo apt upgrade
+ 1183  sudo apt upgrade --fix-missing
+ 1184  sudo reboot
+ 1185  nvidia-smi
+ 1186  apt list --installed | -i "libnvidia"
+ 1187  apt list --installed | grep -i "libnvidia"
+ 1188  sudo apt purge 'nvidia-*'
+ 1189  sudo apt update
+ 1190  sudo apt autoremove
+ 1191  sudo apt update
+ 1192  nvidia-smi
+ 1193  sudo apt update
+ 1194  sudo apt install nvidia-driver-570
+ 1195  sudo apt update
+ 1196  sudo apt upgrade
+ 1197  sudo dpkg --audit
+ 1198  sudo dpkg --configure -a
+ 1199  sudo apt -f install
+ 1200  uname -r
+ 1201  dpkg -l 'linux-image-6.8.0-*' 'linux-headers-6.8.0-*' | grep '^ii' | sort -V
+ 1202  sudo apt purge linux-image-6.8.0-84-generic linux-headers-6.8.0-84-generic linux-headers-6.8.0-84
+ 1203  sudo apt autoremove --purge
+ 1204  uname -r
+ 1205  sudo apt update
+ 1206  sudo reboot
+ 1207  nvidia-smi
+ 1208  uname -r
+ 1209  sudo apt update
+ 1210  nvidia-smi
+ 1211  sudo apt purge -y linux-image-6.8.0-84-generic linux-headers-6.8.0-84-generic linux-headers-6.8.0-84
+ 1212  dpkg -l 'linux-image-6.8.0-*' 'linux-headers-6.8.0-*' | grep '^ii' | sort -V
+ 1213  sudo apt purge linux-image-6.8.0-84-generic linux-headers-6.8.0-84-generic linux-headers-6.8.0-84
+ 1214  sudo apt purge linux-image-6.8.0-84-generic linux-headers-6.8.0-84-generic
+ 1215  sudo apt purge linux-image-6.8.0-84-generic linux-headers-6.8.0-84-genericsudo rm -f /var/crash/nvidia-kernel-source-570.0.crash
+ 1216  sudo rm -f /var/crash/nvidia-kernel-source-570.0.crash
+ 1217  sudo apt update
+ 1218  sudo apt install --reinstall linux-headers-6.8.0-85 linux-headers-6.8.0-85-generic
+ 1219  sudo apt purge linux-image-6.8.0-84-generic linux-headers-6.8.0-84-generic linux-hwe-6.8.0-84
+ 1220  sudo apt purge linux-image-6.8.0-84-generic linux-hwe-6.8.0-84-generic 
+ 1221  sudo apt purge linux-image-6.8.0-84-generic linux-headers-6.8.0-84-generic
+ 1222  sudo apt update
+ 1223  sudo apt install --reinstall linux-hwe-6.8-headers-6.8.0-85 linux-headers-6.8.0-85-generic
+ 1224  sudo apt autoremove
+ 1225  sudo apt purge 'nvidia-*'
+ 1226  sudo apt autoremove
+ 1227  sudo apt purge linux-image-6.8.0-84-generic linux-headers-6.8.0-84-generic
+ 1228  sudo apt autoremove
+ 1229  sudo rm -f /var/crash/nvidia-kernel-source-570.0.crash
+ 1230  sudo apt update
+ 1231  sudo apt install --reinstall linux-headers-6.8.0-85 linux-headers-6.8.0-85-generic
+ 1232  sudo apt install --reinstall linux-hwe-6.8-headers-6.8.0-85 linux-headers-6.8.0-85-generic
+ 1233  sudo env CC=/usr/bin/gcc-12 dkms autoinstall -k 6.8.0-85-generic
+ 1234  sudo apt install --reinstall nvidia-dkms-570 nvidia-driver-570
+ 1235  sudo apt purge 'nvidia-*'
+ 1236  uname -r
+ 1237  ls -ld /lib/modules/6.8.0-85-generic/build
+ 1238  sudo apt update
+ 1239  sudo apt install --reinstall   linux-hwe-6.8-headers-6.8.0-85   linux-headers-6.8.0-85-generic   linux-modules-extra-6.8.0-85-generic   build-essential dkms gcc-12
+ 1240  sudo apt autoremove
+ 1241  nvidia-smi
+ 1242  sudo apt purge 'nvidia-*'
+ 1243  nvidia-smi
+ 1244  sudo apt install nvidia-utils-570 
+ 1245  nvidia-smi
+ 1246  sudo apt purge 'nvidia-*'
+ 1247  sudo apt remove nvidia-utils-570 
+ 1248  nvidia-smi
+ 1249  sudo apt purge 'nvidia-*'
+ 1250  sudo apt autoremove
+ 1251  nvidia-smi
+ 1252  sudo apt autoremove
+ 1253  sudo apt purge 'nvidia-*'
+ 1254  nvidia-smi
+ 1255  sudo apt update
+ 1256  sudo apt autoremove
+ 1257  sudo systemctl isolate multi-user.target
+ 1258  nvidia-smi
+ 1259  sudo apt -f install 
+ 1260  sudo apt update
+ 1261  sudo apt install -f
+ 1262  sudo reboot
+ 1263  nvidia-smi
+ 1264  sudo systemctl isolate multi-user.target
+ 1265  cd Downloads/
+ 1266  ls
+ 1267  rm 'NVIDIA-Linux-x86_64-580.95.05 (1).run' 
+ 1268  rm 'NVIDIA-Linux-x86_64-580.95.05 (2).run' 
+ 1269  rm 'NVIDIA-Linux-x86_64-580.95.05.run' 
+ 1270  ls
+ 1271  sudo systemctl isolate multi-user.target
+ 1272  sudo apt purge 'nvidia-*'
+ 1273  sudo apt autoremove
+ 1274  cd Downloads/
+ 1275  ls
+ 1276  sudo sh NVIDIA-Linux-x86_64-580.95.05.run
+ 1277  sudo apt update
+ 1278  sudo reboot
+ 1279  nvidia-smi
+ 1280  nvcc -V
+ 1281  /etc/bluetooth/main.conf
+ 1282  cat /etc/bluetooth/main.conf
+ 1283  bluetoothctl
+ 1284  sudo nano /etc/bluetooth/input.conf
+ 1285  sudo systemctl restart bluetooth
+ 1286  sudo apt remove blueman
+ 1287  sudo dpkg -r --force-all bluez
+ 1288  sudo apt-get purge blueman bluez-utils bluez bluetooth && sudo apt-get autoremove && sudo apt-get autoclean
+ 1289  sudo apt -y install bluetooth
+ 1290  sudo apt install -f
+ 1291  sudo apt update
+ 1292  sudo poweroff
+ 1293  ollama ps
+ 1294  python streaming_voice_chatbot.py 
+ 1295  sudo apt update
+ 1296  sudo apt upgrade
+ 1297  sudo apt autoremove
+ 1298  /home/robot_admin/dev/chatbot/.venv/bin/python /home/robot_admin/dev/chatbot/behavior_tree.py
+ 1299  python behavior_tree.py
+ 1300  /home/robot_admin/dev/chatbot/.venv/bin/python /home/robot_admin/dev/chatbot/behavior_tree.py
+ 1301  git add behavior_tree.py 
+ 1302  git commit -m "added nodes to behavior tree, no functionality yet"
+ 1303  git branch checkout
+ 1304  git checkout
+ 1305  git push
+ 1306  git push --set-upstream origin py_trees
+ 1307  pip install py-trees
+ 1308  git branch py_trees
+ 1309  git checkout py_trees
+ 1310  python chatbot_voiceid.py
+ 1311  /home/robot_admin/dev/chatbot/.venv/bin/python /home/robot_admin/dev/chatbot/behavior_tree.py
+ 1312  ddd
+ 1313  exit() git status
+ 1314  git status
+ 1315  git add behavior_tree.py 
+ 1316  git commit -m 'breaking down logic of chatbot to fit inside behavior tree'
+ 1317  git push
+ 1318  ollama ps
+ 1319  ollama ps
+ 1320  python chatbot_voiceid_testing.py 
+ 1321  python chatbot_voiceid.py
+ 1322  git pull
+ 1323  git branch
+ 1324  python chatbot_voiceid.py
+ 1325  python chatbot_voiceid_testing.py 
+ 1326  python chatbot_voiceid.py
+ 1327  nvcc -V
+ 1328  nvidia-smi
+ 1329  python chatbot_voiceid.py
+ 1330  pip list
+ 1331  python chatbot_voiceid.py
+ 1332  git add -A
+ 1333  git commit -m "updated voice id logic"
+ 1334  git push
+ 1335  git branch
+ 1336  git checkout voice_id 
+ 1337  git branch
+ 1338  git status
+ 1339  git remote -v
+ 1340  git branch -vv
+ 1341  git fetch --all
+ 1342  git pull --rebase origin voice_id 
+ 1343  git stash
+ 1344  git pull --rebase origin voice_id 
+ 1345  git stash pop
+ 1346  python chatbot_voiceid.py
+ 1347  source .venv/bin/activate
+ 1348  python chatbot_voiceid.py
+ 1349  python chatbot_voiceid_testing.py 
+ 1350  python chatbot_voiceid.py
+ 1351  cd dev
+ 1352  ls
+ 1353  code chatbot/
+ 1354  ls
+ 1355  cd chatbot/
+ 1356  ls
+ 1357  python chatbot_voiceid.py 
+ 1358  source .venv/bin/activate
+ 1359  python chatbot_voiceid.py 
+ 1360  sudo poweroff
+ 1361  ip addr
+ 1362  ollama ps
+ 1363  python test_VAD.py 
+ 1364  python chabot_voiceid.py
+ 1365  python chatbot_voiceid.py
+ 1366  python build_enrollments.py  --root data --out
+ 1367  python build_enrollments.py  --root data --out enrollments.npz
+ 1368  python chatbot_voiceid.py
+ 1369  python test_VAD.py 
+ 1370  python build_enrollments.py  --root data --out enrollments.npz
+ 1371  python test_VAD
+ 1372  git add . 
+ 1373  git commit -m "vad"
+ 1374  git push
+ 1375  git checkout
+ 1376  git push
+ 1377  git pull
+ 1378  python chatbot_voiceid.py
+ 1379  python test_VAD.py 
+ 1380  python chatbot_voiceid.py
+ 1381  git status
+ 1382  git add .
+ 1383  git commit -m 'secondtesting'
+ 1384  git push
+ 1385  git checkout py_trees
+ 1386  git merge origin/py_trees
+ 1387  python chatbot_voiceid.py
+ 1388  git status
+ 1389  git add. chatbot_voiceid.py
+ 1390  git add chatbot_voiceid.py 
+ 1391  git commit -m 'transcript and audio return'
+ 1392  git push
+ 1393  python chatbot_voiceid_testing.py 
+ 1394  git add .
+ 1395  git commit -m "working on adding preroll to VAD and crowd option"
+ 1396  git push
+ 1397  git branch
+ 1398  git checkout py_trees 
+ 1399  git add .
+ 1400  git commit -m 'modularize chatbot_voiceid.py'
+ 1401  git push
+ 1402  git status
+ 1403  git add .
+ 1404  git commit -m 'main_loop.py'
+ 1405  git push
+ 1406  find . -name "*.pyc" -delete && find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+ 1407  python -c "import chatbot_voiceid_refactored; print('Import successful')"
+ 1408  python chatbot_voiceid_testing.py 
+ 1409  cat chatbot/__init__.py
+ 1410  python chatbot_voiceid_refactored.py 
+ 1411  rm -rf chatbot/__pycache__ && rm -rf __pycache__ && find . -name "*.pyc" -delete
+ 1412  wc -l chatbot/__init__.py && hexdump -C chatbot/__init__.py | head -10
+ 1413  head -30 chatbot/__init__.py
+ 1414  head -5 chatbot/__init__.py
+ 1415  tail -20 chatbot/__init__.py
+ 1416  python -c "import chatbot_voiceid_refactored; print('Import successful')"
+ 1417  pip show speechbrain
+ 1418  python -c "import speechbrain; print(dir(speechbrain))"
+ 1419  python -c "from speechbrain.pretrained import EncoderClassifier; print('EncoderClassifier found in speechbrain.pretrained')"
+ 1420  python -c "import chatbot_voiceid_refactored; print('Import successful')"
+ 1421  timeout 5 python -c "import chatbot_voiceid_refactored; print('Script can be executed')" || echo "Script started successfully (timeout expected)"
+ 1422  /home/robot_admin/dev/chatbot/.venv/bin/python
+ 1423  python chatbot_voiceid_refactored.py 
+ 1424  audio = await asyncio.to_thread(detector.record_once)
+ 1425  python chatbot_voiceid_refactored.py 
+ 1426  git branch
+ 1427  git checkout voice_id 
+ 1428  git pull
+ 1429  python streaming_voice_chatbot.py 
+ 1430  git branch
+ 1431  git checkout main
+ 1432  git pull
+ 1433  git checkout voice_id 
+ 1434  python voice_id.py 
+ 1435  python chatbot_voiceid
+ 1436  python chatbot_voiceid.py 
+ 1437  git branch
+ 1438  git checkout voice_id
+ 1439  git add -A
+ 1440  git status
+ 1441  git pull
+ 1442  git status
+ 1443  python chatbot_voiceid.py 
+ 1444  cd data/
+ 1445  ls
+ 1446  cd ..
+ 1447  git status
+ 1448  git reset
+ 1449  git checkout voice_id
+ 1450  git add -A
+ 1451  git status
+ 1452  python chatbot_voiceid_refactored.py 
+ 1453  python chatbot_voiceid.py 
+ 1454  ls
+ 1455  cd chatbot/
+ 1456  ls
+ 1457  cd ..
+ 1458  cd data
+ 1459  ls
+ 1460  cd ..
+ 1461  ls
+ 1462  python chatbot
+ 1463  python chatbot_voiceid
+ 1464  python chatbot_voiceid.py 
+ 1465  cd data
+ 1466  ls
+ 1467  cd ..
+ 1468  python delete_voice_profile.py scott
+ 1469  python chatbot_voiceid.py 
+ 1470  git add -A
+ 1471  git status
+ 1472  git commit -m "updated chatbot logic"
+ 1473  git push
+ 1474  git commit -m "updated chatbot logic"
+ 1475  python chatbot_voiceid.py 
+ 1476  git add -A
+ 1477  git status
+ 1478  git commit -m "made small changes to chatbot"
+ 1479  git push
+ 1480  python chatbot_voiceid.py 
+ 1481  git status
+ 1482  sudo poweroff
+ 1483  ollama ps
+ 1484  python -m pyflakes /home/robot_admin/dev/chatbot/temp.py || true
+ 1485  python -m compileall -q /home/robot_admin/dev/chatbot/temp.py && echo OK || echo FAIL
+ 1486  python temp.py 
+ 1487  r
+ 1488  python temp.py 
+ 1489  python chatbot_voiceid.py
+ 1490  python test_VAD.py 
+ 1491  python temp.py 
+ 1492  git add -A
+ 1493  git status
+ 1494  git commit -m "idk its something"
+ 1495  git push
+ 1496  git checkout main 
+ 1497  python streaming_voice_chatbot
+ 1498  python streaming_voice_chatbot.py 
+ 1499  git checkout voice_id 
+ 1500  python streaming_voice_chatbot
+ 1501  python streaming_voice_chatbot.py 
+ 1502  python voice_id.py 
+ 1503  python chatbot_voiceid.py 
+ 1504  python temp.py 
+ 1505  sudo apt update
+ 1506  ollama ps
+ 1507  TTS --list_models  # To see available models
+ 1508  sudo poweroff
+ 1509  git branch
+ 1510  gcc --version
+ 1511  python chatbot_voiceid_refactored.py
+ 1512  git pull origin py_trees
+ 1513  python chatbot_voiceid_refactored.py
+ 1514  deactivate
+ 1515  sudo apt install -y build-essential libffi-dev libwebrtc-audio-processing1\python3-dev portaudio 19-dev
+ 1516  sudo apt install -y build-essential libffi-dev libwebrtc-audio-processing1 \ python3-dev portaudio 19-dev
+ 1517  sudo apt update
+ 1518  sudo apt install -y build-essential libffi-dev libwebrtc-audio-processing1 python3-dev portaudio19-dev
+ 1519  pip install webrtc-audio-processing
+ 1520  source .venv/bin/activate/
+ 1521  source .venv/bin/activate
+ 1522  pip install webrtc-audio-processing
+ 1523  pip install --upgrade pip setuptools wheel
+ 1524  pip install webrtc-audio-processing
+ 1525  deactivate
+ 1526  sudo apt install -y swig build-essential python3-dev     libwebrtc-audio-processing1 libwebrtc-audio-processing-dev
+ 1527  source .venv/bin/activate
+ 1528  pip install --no-cache-dir webrtc-audio-processing
+ 1529  pip install webrtc-audio-processing
+ 1530  python t.pu
+ 1531  python t.py
+ 1532  git add .
+ 1533  git commit -m "adding webrtc"
+ 1534  git status
+ 1535  git add .
+ 1536  git commit -m 'minor changes, next time look at basespeaker throwing error'
+ 1537  python chatbot_voiceid_testing.py 
+ 1538  python chatbot_voiceid_refactored.py 
+ 1539  python chatbot_voiceid.py
+ 1540  python chatbot_voiceid_refactored.py 
+ 1541  python build_enrollments.py --root data --out enrollments.npx
+ 1542  python build_enrollments.py --root data --out enrollments.npz
+ 1543  python chatbot_voiceid_refactored.py 
+ 1544  python build_enrollments.py --root data --out enrollments.npz
+ 1545  python chatbot_voiceid_refactored.py
+ 1546  python build_enrollments.py --root data --out enrollments.npz
+ 1547  python chatbot_voiceid_refactored.py
+ 1548  python build_enrollments.py --root data --out enrollments.npz
+ 1549  python chatbot_voiceid_refactored.py
+ 1550  python build_enrollments.py --root data --out enrollments.npz
+ 1551  python chatbot_voiceid_refactored.py
+ 1552  git status
+ 1553  git add chatbot/main_functionality.py
+ 1554  git commit -a 'finished implementing mainfunctionality class; successfully integrated into chatbot_voiceid_refactored.py'
+ 1555  git push
+ 1556  which python
+ 1557  python chatbot_voiceid_refactored.py
+ 1558  git status
+ 1559  git add .
+ 1560  git commit -m 'added documentation to chatbot_voiceid_refactored, renamed main_functionality class to cora_chatbot, use getter for voice id, clean up code'
+ 1561  git push
+ 1562  git checkout voice)id
+ 1563  git checkout voice_id
+ 1564  git pull
+ 1565  python chatbot_voiceid.py
+ 1566  pip install py-webrtc-audio-processing
+ 1567  python -c "import webrtc_audio_processing, inspect; import pkgutil; print('MODULE:', webrtc_audio_processing); print('ATTRS:', dir(webrtc_audio_processing)); [print('SUBMODULE', m.name) for m in pkgutil.iter_modules(webrtc_audio_processing.__path__)]"
+ 1568  python chatbot_voiceid.py
+ 1569  python -c "from webrtc_audio_processing import AudioProcessingModule; apm=AudioProcessingModule(); print([m for m in dir(apm) if 'high' in m.lower() or 'filter' in m.lower() or 'noise' in m.lower() or 'echo' in m.lower()]); print(dir(apm))"
+ 1570  python chatbot_voiceid.py
+ 1571  git add .
+ 1572  git commit -m "editing"
+ 1573  git push
+ 1574  git pull
+ 1575  git branch
+ 1576  git checkout py_trees 
+ 1577  python chatbot_voiceid.py
+ 1578  git checkout voice_id 
+ 1579  git pull
+ 1580  python chatbot_voiceid.py
+ 1581  python chatbot_voiceid_testing.py 
+ 1582  git branch
+ 1583  ollama ps
+ 1584  python chatbot_voiceid_refactored.py 
+ 1585  python build_enrollments.py --root data --out enrollments.npz
+ 1586  python chatbot_voiceid_refactored.py 
+ 1587  python build_enrollments.py --root data --out enrollments.npz
+ 1588  python chatbot_voiceid_.py 
+ 1589  python build_enrollments.py --root data --out enrollments.npz
+ 1590  git add .
+ 1591  git push
+ 1592  git commit
+ 1593  git commit -m "ff"
+ 1594  git push
+ 1595  python build_enrollments.py --root data --out enrollments.npz
+ 1596  python chatbot_voiceid_testing.py 
+ 1597  git checkout py_trees 
+ 1598  git reset
+ 1599  git checkout py_trees 
+ 1600  git stash
+ 1601  git checkout py_trees 
+ 1602  python chatbot_voiceid_refactored.py 
+ 1603  source .venv/bin/activate
+ 1604  python chatbot_voiceid_refactored.py 
+ 1605  git status
+ 1606  git add -A
+ 1607  git commit -m "updated some code to temporarily disable voice id"
+ 1608  git push
+ 1609  python chatbot_voiceid_refactored.py 
+ 1610  sudo poweroff
+ 1611  git stash
+ 1612  git pull
+ 1613  sudo apt update && sudo apt install espeak-ng libespeak1
+ 1614  python
+ 1615  espeak --voices
+ 1616  python chatbot_voiceid_refactored.py 
+ 1617  pip install piper-tts
+ 1618  docker --version
+ 1619  sudo apt-get update && sudo apt-get install -y --no-install-recommends    curl    gnupg2
+ 1620  curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg   && curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list |     sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' |     sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+ 1621  sudo sed -i -e '/experimental/ s/^#//g' /etc/apt/sources.list.d/nvidia-container-toolkit.list
+ 1622  sudo apt-get update
+ 1623  export NVIDIA_CONTAINER_TOOLKIT_VERSION=1.18.0-1
+ 1624  cd ..
+ 1625  git clone https://github.com/domesticatedviking/TextyMcSpeechy
+ 1626  cd TextyMcSpeechy/
+ 1627  code .
+ 1628  sudo bash setup.sh
+ 1629  ./dataset_recorder.sh metadata.csv
+ 1630  ./dataset_recorder/dataset_recorder.sh 
+ 1631  ./dataset_recorder/dataset_recorder.sh metadata.csv
+ 1632  ./dataset_recorder/dataset_recorder.sh
+ 1633  cdfsdf
+ 1634  cd dataset_recorder/
+ 1635  ./dataset_recorder.sh metadata.csv
+ 1636  nvcc -V
+ 1637  python chatbot_voiceid_refactored.py 
+ 1638  /home/robot_admin/dev/chatbot/.venv/bin/python /home/robot_admin/dev/chatbot/quick/test_piper.py
+ 1639  /home/robot_admin/dev/chatbot/.venv/bin/python /home/robot_admin/dev/chatbot/quick_piper_test.py
+ 1640  python chatbot_voiceid_refactored.py 
+ 1641  /home/robot_admin/dev/chatbot/.venv/bin/python /home/robot_admin/dev/chatbot/quick_piper_diag.py
+ 1642  /home/robot_admin/dev/chatbot/.venv/bin/python - << 'PY'
+ 1643  import io
+ 1644  from pydub import AudioSegment
+ 1645  import piper
+ 1646  from chatbot.constants import VOICE_NAME
+ 1647  voice = piper.PiperVoice.load(VOICE_NAME)
+ 1648  buf = io.BytesIO()
+ 1649  voice.synthesize("This is a longer Piper diagnostic test. If you hear this clearly, audio playback is working.", buf)
+ 1650  raw = buf.getvalue()
+ 1651  print("bytes:", len(raw))
+ 1652  buf.seek(0)
+ 1653  a = AudioSegment.from_file(buf, format="wav")
+ 1654  print("frame_rate:", a.frame_rate, "channels:", a.channels, "sample_width:", a.sample_width, "duration_s:", round(a.duration_seconds, 2))
+ 1655  try:
+ 1656      import simpleaudio as sa
+ 1657      play_obj = sa.play_buffer(a.set_channels(1).set_sample_width(2).raw_data, 1, 2, a.frame_rate)
+ 1658      play_obj.wait_done()
+ 1659      print("played")
+ 1660  except Exception as e:
+ 1661      print("playback error:", e)
+ 1662  PY
+ 1663  /home/robot_admin/dev/chatbot/.venv/bin/python /home/robot_admin/dev/chatbot/quick_piper_diag.py
+ 1664  sudo apt-get install espeak-ng espeak-ng-data
+ 1665  echo "ESPEAK_DATA_PATH=$ESPEAK_DATA_PATH"
+ 1666  ls -ld /usr/share/espeak-ng-data /usr/lib*/espeak-ng-data 2>/dev/null || true
+ 1667  dpkg -L espeak-ng-data 2>/dev/null | grep -E "/espeak-ng-data$|/espeak-ng-data/" | head -n 20
+ 1668  dpkg -L espeak-ng 2>/dev/null | grep -E "/espeak-ng-data$|/espeak-ng-data/" | head -n 5
+ 1669  /home/robot_admin/dev/chatbot/.venv/bin/python /home/robot_admin/dev/chatbot/quick_piper_diag.py
+ 1670  echo "$ESPEAK_DATA_PATH"
+ 1671  export ESPEAK_DATA_PATH=/usr/lib/x86_64-linux-gnu/espeak-ng-data
+ 1672  echo 'export ESPEAK_DATA_PATH=/usr/lib/x86_64-linux-gnu/espeak-ng-data' >> ~/.bashrc
+ 1673  # then reload your shell config:
+ 1674  source ~/.bashrc
+ 1675  echo "$ESPEAK_DATA_PATH"
+ 1676  /home/robot_admin/dev/chatbot/.venv/bin/python /home/robot_admin/dev/chatbot/quick_piper_diag.py
+ 1677  echo "$ESPEAK_DATA_PATH"
+ 1678  ls /usr/lib/x86_64-linux-gnu/espeak-ng-data
+ 1679  espeak-ng --version
+ 1680  ls /usr/share/espeak-ng-data
+ 1681  /home/robot_admin/dev/chatbot/.venv/bin/python /home/robot_admin/dev/chatbot/quick_piper_diag.py
+ 1682  /home/robot_admin/dev/chatbot/.venv/bin/python - << 'PY'
+ 1683  import inspect, piper
+ 1684  print('piper version:', getattr(piper, '__version__', 'unknown'))
+ 1685  print('PiperVoice:', piper.PiperVoice)
+ 1686  print('PiperVoice.load signature:', inspect.signature(piper.PiperVoice.load))
+ 1687  print('PiperVoice methods:', [m for m in dir(piper.PiperVoice) if not m.startswith('_')])
+ 1688  print('Voice instance methods:')
+ 1689  voice = piper.PiperVoice.load
+ 1690  print('ok')
+ 1691  PY
+ 1692  /home/robot_admin/dev/chatbot/.venv/bin/python - << 'PY'
+ 1693  import inspect, piper
+ 1694  voice = piper.PiperVoice
+ 1695  print('synthesize signature:', inspect.signature(voice.synthesize))
+ 1696  print('synthesize_wav signature:', inspect.signature(voice.synthesize_wav))
+ 1697  print('doc synthesize:', inspect.getdoc(voice.synthesize)[:400])
+ 1698  print('doc synthesize_wav:', inspect.getdoc(voice.synthesize_wav)[:400])
+ 1699  PY
+ 1700  /home/robot_admin/dev/chatbot/.venv/bin/python /home/robot_admin/dev/chatbot/quick_piper_diag.py
+ 1701  /home/robot_admin/dev/chatbot/.venv/bin/python - << 'PY'
+ 1702  import inspect
+ 1703  from piper.config import SynthesisConfig
+ 1704  print('SynthesisConfig signature:', inspect.signature(SynthesisConfig))
+ 1705  print('fields:', [p.name for p in inspect.signature(SynthesisConfig).parameters.values()])
+ 1706  print(SynthesisConfig())
+ 1707  PY
+ 1708  /home/robot_admin/dev/chatbot/.venv/bin/python /home/robot_admin/dev/chatbot/quick_piper_diag.py
+ 1709  /home/robot_admin/dev/chatbot/.venv/bin/python /home/robot_admin/dev/chatbot/quick_piper_test.py
+ 1710  python chatbot_voiceid_refactored.py 
+ 1711  ls chatbot/voices/amy/
+ 1712  pwd
+ 1713  ls /home/robot_admin/dev/chatbot/chatbot/voices/amy/
+ 1714  chmod +x /home/robot_admin/dev/chatbot/chatbot/voices/amy/en_US-amy-medium.onnx
+ 1715  chmod +x /home/robot_admin/dev/chatbot/chatbot/voices/amy/en_US-amy-medium.onnx.json 
+ 1716  chmod +x /home/robot_admin/dev/chatbot/chatbot/voices/amy/MODEL_CARD 
+ 1717  python chatbot_voiceid_refactored.py 
+ 1718  ls /home/robot_admin/dev/chatbot/chatbot/voices/amy/en_US-amy-low.onnx
+ 1719  chmod +x /home/robot_admin/dev/chatbot/chatbot/voices/amy/en_US-amy-low.onnx
+ 1720  python chatbot_voiceid_refactored.py 
+ 1721  dpkg -L espeak-ng-data
+ 1722  pip install onnxruntime-gpu
+ 1723  python3 -m piper.download_voices en_US-lessac-medium
+ 1724  python chatbot_voiceid_refactored.py 
+ 1725  ldd "$(dirname "$(which piper)")/../lib/libonnxruntime_providers_cuda.so" 2>/dev/null | grep -i cudnn || ldd "$(which piper)" | grep -i cudnn
+ 1726  dpkg -L libcudnn9-cuda-12 | grep 'libcudnn_.*\.so'
+ 1727  ldconfig -p | grep -E 'libcudnn(_cnn|_ops)?\.so\.9'
+ 1728  echo $LD_LIBRARY_PATH
+ 1729  nvcc -V
+ 1730  cd /lib/x86_64-linux-gnu
+ 1731  python chatbot_voiceid_refactored.py 
+ 1732  cd ~/Downloads/
+ 1733  ls
+ 1734  python3 -m piper.download_voices en_US-kathleen-low
+ 1735  cd chatbot/voices
+ 1736  python3 -m piper.download_voices en_US-kathleen-low
+ 1737  cd ..
+ 1738  python chatbot_voiceid_refactored.py 
+ 1739  cd chatbot/voices
+ 1740  python3 -m piper.download_voices en_US-hfc_female_medium
+ 1741  python3 -m piper.download_voices en_US-hfc_female-medium
+ 1742  cd ..
+ 1743  python chatbot_voiceid_refactored.py 
+ 1744  cd chatbot/voices
+ 1745  python3 -m piper.download_voices en_GB-semaine-medium
+ 1746  cd chatbot/voices
+ 1747  cd ..
+ 1748  python chatbot_voiceid_refactored.py 
+ 1749  git status
+ 1750  git add .
+ 1751  git status
+ 1752  git commit -a 'switched to piper tts'
+ 1753  git commit -m 'switched to piper tts'
+ 1754  git push
+ 1755  cd chatbot/voices/
+ 1756  ls
+ 1757  [A
+ 1758  python3 -m piper.download_voices en_US-libritts_r-medium
+ 1759  python chatbot_voiceid_refactored.py 
+ 1760  cd ..
+ 1761  cd //
+ 1762  cd /dev
+ 1763  cd /chatbot
+ 1764  cd chatbot
+ 1765  ls
+ 1766  cd ..
+ 1767  ls
+ 1768  cd dev
+ 1769  ls
+ 1770  cd /dev/chatbot
+ 1771  cd dev/chatbot
+ 1772  cd ..
+ 1773  ls
+ 1774  cd dev
+ 1775  ls
+ 1776  cd chatbot/voices/
+ 1777  git branch
+ 1778  git checkout voice_id 
+ 1779  git checkout py_trees 
+ 1780  git pull
+ 1781  git status
+ 1782  git add .
+ 1783  git commit -m "adding WEBRTC"
+ 1784  git push
+ 1785  git checkout voice_id 
+ 1786  git checkout py_trees 
+ 1787  python chatbot_voiceid_refactored.py 
+ 1788  git add .
+ 1789  git commit -m "WEBRTC"
+ 1790  git push
+ 1791  git checkout voice_id 
+ 1792  python chatbot_voiceid.py
+ 1793  git checkout py_trees 
+ 1794  python chatbot_voiceid_refactored.py 
+ 1795  ls /home/robot_admin/dev/chatbot/chatbot/voices/semaine/
+ 1796  python chatbot_voiceid_refactored.py 
+ 1797  python quick_piper_diag.py 
+ 1798  python chatbot_voiceid_refactored.py 
+ 1799  source .venv/bin/activate
+ 1800  python chatbot_voiceid_refactored.py 
+ 1801  python quick_piper_diag.py 
+ 1802  python chatbot_voiceid_refactored.py 
+ 1803  git add .
+ 1804  git commit -m ""
+ 1805  git commit -m "tts is ptchyt"
+ 1806  git push
+ 1807  cargo
+ 1808  python chatbot_voiceid_refactored.py 
+ 1809  git status
+ 1810  git add -A
+ 1811  git status
+ 1812  git commit -m "evaluate processed signal"
+ 1813  git push
+ 1814  cargo
+ 1815  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+ 1816  cd ..
+ 1817  git clone https://github.com/Rikorose/DeepFilterNet.git
+ 1818  cd DeepFilterNet/
+ 1819  cd ..
+ 1820  git clone https://github.com/webrtc-rs/webrtc.git
+ 1821  cd webrtc/
+ 1822  cd examples/
+ 1823  cargo build --example play-from-disk-h264 
+ 1824  apm_rs
+ 1825  cd rust/apm_rs/
+ 1826  maturin develop --release
+ 1827  pip install maturin
+ 1828  dpkg -L libwebrtc-audio-processing-dev | grep -E '\.pc$' || true
+ 1829  sudo apt-get install -y build-essential pkg-config automake autoconf libtool
+ 1830  cd /home/robot_admin/dev/chatbot/rust/apm_rs
+ 1831  maturin develop --release
+ 1832  sudo apt-get update
+ 1833  sudo apt-get install -y build-essential pkg-config automake autoconf libtool
+ 1834  cd /home/robot_admin/dev/chatbot/rust/apm_rs
+ 1835  maturin develop --release
+ 1836  sudo apt-get install -y build-essential pkg-config automake autoconf libtool
+ 1837  cd /home/robot_admin/dev/chatbot/rust/apm_rs
+ 1838  maturin develop --release
+ 1839  sudo apt update
+ 1840  sudo apt upgrade
+ 1841  maturin develop --release
+ 1842  python -c "import apm_rs, numpy as np; apm=apm_rs.ApmProcessor(); mic=b'\x00'*960; rev=b'\x00'*960; out=apm.process_stream_30ms(mic, rev); print(len(out))"
+ 1843  pip install 'maturin[patchelf]'
+ 1844  pip install --upgrade pip
+ 1845  cd ../..
+ 1846  python chatbot_voiceid_refactored.py 
+ 1847  python
+ 1848  cd ../..
+ 1849  cd dev/chatbot/
+ 1850  python
+ 1851  python chatbot_voiceid_refactored.py 
+ 1852  cd rust/apm_rs/
+ 1853  maturin develop --release
+ 1854  sudo apt-get install -y pkg-config libwebrtc-audio-processing-dev
+ 1855  pkg-config --modversion webrtc-audio-processing
+ 1856  pkg-config --cflags --libs webrtc-audio-processing
+ 1857  sudo apt-get install -y pkg-config libwebrtc-audio-processing-dev
+ 1858  ls /usr/local/lib/pkgconfig
+ 1859  pkg-config --modversion webrtc-audio-processing
+ 1860  python chatbot_voiceid_refactored.py 
+ 1861  pkg-config --modversion webrtc-audio-processing
+ 1862  python chatbot_voiceid_refactored.py 
+ 1863  sudo apt update
+ 1864  sudo apt upgrade
+ 1865  cd Downloads/
+ 1866  sudo dpkg -i code_1.105.1-1760482543_amd64.deb 
+ 1867  git status
+ 1868  git add -A
+ 1869  ls
+ 1870  git add -A
+ 1871  git status
+ 1872  git reset
+ 1873  git status
+ 1874  git add -A
+ 1875  git status
+ 1876  git reset
+ 1877  git add -A
+ 1878  git statu
+ 1879  git status
+ 1880  git add -A
+ 1881  git status
+ 1882  git commit -m "added rust variant of webrtc for noise suppression. Tweaked things to improve chat reliability"
+ 1883  git push
+ 1884  python - << 'PY'
+ 1885  from chatbot.speakers.piper_speaker import PiperSpeaker
+ 1886  print('Creating PiperSpeaker with CPU...')
+ 1887  sp = PiperSpeaker(use_cuda=False)
+ 1888  print('Instance created successfully (CPU).')
+ 1889  PY
+ 1890  python - << 'PY'
+ 1891  from chatbot.speakers.piper_speaker import PiperSpeaker
+ 1892  print('Creating PiperSpeaker with CPU...')
+ 1893  sp = PiperSpeaker(use_cuda=False)
+ 1894  print('Instance created successfully (CPU).')
+ 1895  PY
+ 1896  python - << 'PY'
+ 1897  import inspect
+ 1898  import piper
+ 1899  sig = inspect.signature(piper.PiperVoice.load)
+ 1900  print(sig)
+ 1901  print('parameters:', list(sig.parameters.keys()))
+ 1902  for name, p in sig.parameters.items():
+ 1903      print(name, p.kind, p.default)
+ 1904  PY
+ 1905  ls -1 /home/robot_admin/dev/chatbot/chatbot/voices/semaine | sed -n '1,50p'
+ 1906  python chatbot_voiceid_refactored.py 
+ 1907  python chatbot_voiceid_refactored.py 
+ 1908  pip freeze > requirements.txt
+ 1909  pip install ctranslate2==4.4.0
+ 1910  pip freeze > requirements.txt
+ 1911  python chatbot_voiceid_refactored.py 
+ 1912  pip install ctranslate2
+ 1913  pip install -U ctranslate2
+ 1914  pip freeze > requirements.txt
+ 1915  python chatbot_voiceid_refactored.py 
+ 1916  ldconfig -p | grep -E 'libcudnn(_cnn|_ops)?\.so\.9'
+ 1917  ldd /lib/x86_64-linux-gnu/libcudnn_cnn.so.9
+ 1918  python -c "import onnxruntime as ort; print(ort.get_available_providers())"
+ 1919  code ~/.bashrc
+ 1920  cd /usr/lib/x86_64-linux-gnu
+ 1921  python chatbot_voiceid_refactored.py 
+ 1922  nvidia-smi
+ 1923  python chatbot_voiceid_refactored.py 
+ 1924  ollama run llama3.2:3b
+ 1925  ollama pull llama3.2:3b-instruct
+ 1926  ollama run llama3.2:3b-instruct
+ 1927  python chatbot_voiceid_refactored.py 
+ 1928  ollama run deepseek-r1:latest
+ 1929  nvidia-smi
+ 1930  ollama ps
+ 1931  nvidia-smi
+ 1932  ollama ps
+ 1933  which python
+ 1934  pip install mne
+ 1935  python display_brain.py 
+ 1936  python chatbot_voiceid_refactored.py 
+ 1937  ollama run deepseek-r1
+ 1938  python chatbot_voiceid_refactored.py 
+ 1939  git status
+ 1940  git add -A
+ 1941  git commit -m "update speaker and noise cancelling"
+ 1942  git push
+ 1943  python chatbot_voiceid_refactored.py 
+ 1944  sudo poweroff
+ 1945  python chatbot_voiceid_refactored.py 
+ 1946  git status
+ 1947  python chatbot_voiceid_refactored.py 
+ 1948  which python
+ 1949  which pip
+ 1950  pip install smolagents
+ 1951  mkdir tools
+ 1952  mkdir agent_tools
+ 1953  touch agent_tools/__init__.py
+ 1954  nano agent_tools/patient_tools.py
+ 1955  touch seed_data_patient.py
+ 1956  python seed_data_patient.py
+ 1957  python chatbot_voiceid_refactored.py 
+ 1958  pip install 'smolagents[litellm]'
+ 1959  echo "smolagents[litellm]" >> requirements.txt
+ 1960  python chatbot_voiceid_refactored.py 
+ 1961  python test_agent_integration.py 
+ 1962  python chatbot_voiceid_refactored.py 
+ 1963  code ~/.bashrc
+ 1964  cd /usr/local/cuda-12.9/lib64
+ 1965  ls
+ 1966  cd /lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu
+ 1967  cd /lib/x86_64-linux-gnu
+ 1968  ls
+ 1969  cd /usr/lib/x86_64-linux-gnu
+ 1970  ls
+ 1971  ls libcud*
+ 1972  ls libcudnn_cnn.so.9.1.0
+ 1973  ls  libcudnn_cnn.so
+ 1974  ls -la  libcudnn_cnn.so
+ 1975  ls -la libcudnn_cnn.so.9
+ 1976  history | grep "ln"
+ 1977  history > temp.txt
+ 1978  histor > temp.txt
+ 1979  history > temp.txt

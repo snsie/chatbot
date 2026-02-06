@@ -3,7 +3,8 @@ data/
 __pycache__/
 .env
 enrollments.npz
-
+.cuda_128_env/
+.venv2/
 # Rust files
 target/
 **/*.rs.bk
